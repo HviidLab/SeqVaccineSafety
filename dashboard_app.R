@@ -315,56 +315,95 @@ server <- function(input, output, session) {
     control_length <- control_end - control_start + 1
 
     # Recalculate event assignments based on new windows
-    data$event_in_risk_window <- ifelse(
-      data$days_to_event >= risk_start & data$days_to_event <= risk_end, 1, 0
-    )
+    data$event_in_risk_window <- (data$days_to_event >= risk_start & data$days_to_event <= risk_end)
+    data$event_in_control_window <- (data$days_to_event >= control_start & data$days_to_event <= control_end)
+
+    # Filter to only include cases whose events fall in either the risk OR control window
+    # This is crucial: if user changes windows, some cases may fall outside both windows
+    data <- data[data$event_in_risk_window | data$event_in_control_window, ]
+
+    # Convert to binary 0/1 for analysis
+    data$event_in_risk_window <- ifelse(data$event_in_risk_window, 1, 0)
+
+    # Recalculate control_window_end based on new control window parameters
+    # This is crucial for correct look scheduling when user changes the control window
+    data$control_window_end <- data$vaccination_date + control_end
 
     # Alpha spending
-    p0 <- 0.5
+    # CRITICAL: Null hypothesis proportion must account for different window lengths!
+    # Under null (no elevated risk), events distribute proportional to observation time
+    p0 <- risk_length / (risk_length + control_length)
     alpha_per_look <- alpha / n_looks
     z_critical <- qnorm(1 - alpha_per_look)
 
-    # Define look schedule
+    # Define look schedule - always plan for n_looks
     look_dates <- sort(unique(data$control_window_end))
-    look_schedule <- c()
+
+    # Find first viable look date
     current_date <- min(look_dates)
     max_date <- max(look_dates)
+    first_look_date <- NULL
 
-    while (current_date <= max_date) {
+    while (current_date <= max_date && is.null(first_look_date)) {
       available_cases <- data[data$control_window_end <= current_date, ]
       if (nrow(available_cases) >= min_cases_per_look) {
-        look_schedule <- c(look_schedule, as.character(current_date))
+        first_look_date <- current_date
       }
       current_date <- current_date + 14
     }
 
-    look_schedule <- unique(look_schedule)
-    actual_looks <- min(length(look_schedule), n_looks)
-    if (actual_looks == 0) return(NULL)
+    if (is.null(first_look_date)) return(NULL)
 
-    look_schedule <- as.Date(look_schedule[1:actual_looks])
+    # Generate all n_looks scheduled dates (14 days apart)
+    look_schedule <- seq(from = first_look_date,
+                        by = 14,
+                        length.out = n_looks)
 
-    # Perform analysis at each look
+    # Determine which looks have data available
+    looks_with_data <- sapply(look_schedule, function(date) {
+      available <- data[data$control_window_end <= date, ]
+      nrow(available) >= min_cases_per_look
+    })
+
+    # Perform analysis at each look (including planned future looks)
     results <- data.frame()
     signal_detected_overall <- FALSE
 
-    for (look in 1:actual_looks) {
+    for (look in 1:n_looks) {
       look_date <- look_schedule[look]
-      available_cases <- data[data$control_window_end <= look_date, ]
-      n_cases <- nrow(available_cases)
 
-      events_risk <- sum(available_cases$event_in_risk_window)
-      events_control <- n_cases - events_risk
+      # Check if this look has sufficient data
+      if (looks_with_data[look]) {
+        available_cases <- data[data$control_window_end <= look_date, ]
+        n_cases <- nrow(available_cases)
 
-      prop_risk <- events_risk / n_cases
-      observed_RR <- ifelse(events_control > 0, events_risk / events_control, NA)
+        events_risk <- sum(available_cases$event_in_risk_window)
+        events_control <- n_cases - events_risk
 
-      # Test statistic
-      se_prop <- sqrt(p0 * (1 - p0) / n_cases)
-      z_stat <- (prop_risk - p0) / se_prop
-      p_val <- 1 - pnorm(z_stat)
+        prop_risk <- events_risk / n_cases
+        # RR must account for different window lengths!
+        # RR = (rate in risk) / (rate in control) = (events_risk/risk_length) / (events_control/control_length)
+        observed_RR <- ifelse(events_control > 0,
+                             (events_risk / events_control) * (control_length / risk_length),
+                             NA)
 
-      signal_detected <- (z_stat >= z_critical)
+        # Test statistic
+        se_prop <- sqrt(p0 * (1 - p0) / n_cases)
+        z_stat <- (prop_risk - p0) / se_prop
+        p_val <- 1 - pnorm(z_stat)
+
+        signal_detected <- (z_stat >= z_critical)
+      } else {
+        # Planned look but data not yet available
+        n_cases <- NA
+        events_risk <- NA
+        events_control <- NA
+        prop_risk <- NA
+        observed_RR <- NA
+        z_stat <- NA
+        p_val <- NA
+        signal_detected <- FALSE
+      }
 
       results <- rbind(results, data.frame(
         look_number = look,
@@ -377,11 +416,32 @@ server <- function(input, output, session) {
         z_statistic = z_stat,
         z_critical = z_critical,
         p_value = p_val,
-        signal_detected = signal_detected
+        signal_detected = signal_detected,
+        data_available = looks_with_data[look]
       ))
 
-      if (signal_detected) {
+      # Stop if signal detected (only for looks with data)
+      if (looks_with_data[look] && signal_detected) {
         signal_detected_overall <- TRUE
+        # Keep remaining planned looks in results but mark them as not analyzed
+        if (look < n_looks) {
+          for (future_look in (look + 1):n_looks) {
+            results <- rbind(results, data.frame(
+              look_number = future_look,
+              look_date = look_schedule[future_look],
+              n_cases = NA,
+              events_risk = NA,
+              events_control = NA,
+              prop_risk = NA,
+              observed_RR = NA,
+              z_statistic = NA,
+              z_critical = z_critical,
+              p_value = NA,
+              signal_detected = FALSE,
+              data_available = FALSE
+            ))
+          }
+        }
         break
       }
     }
@@ -424,7 +484,9 @@ server <- function(input, output, session) {
         "—", "Total Cases", icon = icon("users"), color = "light-blue"
       )
     } else {
-      latest <- results$results[nrow(results$results), ]
+      # Get latest look with actual data (not planned future looks)
+      latest <- results$results[results$results$data_available == TRUE, ]
+      latest <- latest[nrow(latest), ]
       valueBox(
         latest$n_cases, "Total Cases Analyzed",
         icon = icon("users"), color = "light-blue"
@@ -439,7 +501,9 @@ server <- function(input, output, session) {
         "—", "Relative Risk", icon = icon("chart-line"), color = "purple"
       )
     } else {
-      latest <- results$results[nrow(results$results), ]
+      # Get latest look with actual data (not planned future looks)
+      latest <- results$results[results$results$data_available == TRUE, ]
+      latest <- latest[nrow(latest), ]
       color <- if (latest$observed_RR > 2.0) "red" else if (latest$observed_RR > 1.5) "orange" else "green"
       valueBox(
         sprintf("%.2f", latest$observed_RR), "Observed Relative Risk",
@@ -455,7 +519,9 @@ server <- function(input, output, session) {
         "—", "P-value", icon = icon("calculator"), color = "yellow"
       )
     } else {
-      latest <- results$results[nrow(results$results), ]
+      # Get latest look with actual data (not planned future looks)
+      latest <- results$results[results$results$data_available == TRUE, ]
+      latest <- latest[nrow(latest), ]
       color <- if (latest$p_value < results$alpha_per_look) "red" else "green"
       valueBox(
         sprintf("%.4f", latest$p_value),
@@ -491,23 +557,52 @@ server <- function(input, output, session) {
 
     df <- results$results
 
-    plot_ly(df) %>%
-      add_trace(x = ~look_number, y = ~z_statistic, type = 'scatter', mode = 'lines+markers',
-                name = 'Z-Statistic', line = list(color = '#3498db', width = 3),
-                marker = list(size = 10, color = '#3498db')) %>%
-      add_trace(x = ~look_number, y = ~z_critical, type = 'scatter', mode = 'lines',
+    # Separate looks with data from planned future looks
+    df_with_data <- df[df$data_available == TRUE & !is.na(df$z_statistic), ]
+    df_planned <- df[df$data_available == FALSE | is.na(df$z_statistic), ]
+
+    p <- plot_ly()
+
+    # Add z-statistic for looks with data
+    if (nrow(df_with_data) > 0) {
+      p <- p %>%
+        add_trace(data = df_with_data, x = ~look_number, y = ~z_statistic,
+                  type = 'scatter', mode = 'lines+markers',
+                  name = 'Z-Statistic (Data Available)',
+                  line = list(color = '#3498db', width = 3),
+                  marker = list(size = 10, color = '#3498db'))
+    }
+
+    # Add critical boundary across all looks
+    p <- p %>%
+      add_trace(x = c(1, max(df$look_number)), y = c(df$z_critical[1], df$z_critical[1]),
+                type = 'scatter', mode = 'lines',
                 name = 'Critical Boundary', line = list(color = '#e74c3c', width = 2, dash = 'dash')) %>%
-      add_trace(x = c(min(df$look_number), max(df$look_number)), y = c(0, 0),
+      add_trace(x = c(1, max(df$look_number)), y = c(0, 0),
                 type = 'scatter', mode = 'lines', name = 'Null (No Effect)',
-                line = list(color = 'gray', width = 1, dash = 'dot')) %>%
+                line = list(color = 'gray', width = 1, dash = 'dot'))
+
+    # Add markers for planned looks without data
+    if (nrow(df_planned) > 0) {
+      p <- p %>%
+        add_trace(data = df_planned, x = ~look_number, y = 0,
+                  type = 'scatter', mode = 'markers',
+                  name = 'Planned (Data Not Yet Available)',
+                  marker = list(size = 8, color = '#95a5a6', symbol = 'circle-open'))
+    }
+
+    p <- p %>%
       layout(
         title = list(text = "Sequential Test Statistics vs. Critical Boundary", font = list(size = 16)),
-        xaxis = list(title = "Sequential Look Number"),
+        xaxis = list(title = "Sequential Look Number",
+                     range = c(0.5, max(df$look_number) + 0.5)),
         yaxis = list(title = "Z-Statistic"),
         hovermode = 'closest',
         showlegend = TRUE,
         legend = list(x = 0.02, y = 0.98)
       )
+
+    p
   })
 
   # RR Plot
@@ -572,7 +667,10 @@ server <- function(input, output, session) {
     df$observed_RR <- round(df$observed_RR, 2)
     df$z_statistic <- round(df$z_statistic, 3)
     df$p_value <- round(df$p_value, 4)
-    df$status <- ifelse(df$signal_detected, "SIGNAL", "Continue")
+
+    # Update status to show planned vs analyzed
+    df$status <- ifelse(!df$data_available, "Planned",
+                       ifelse(df$signal_detected, "SIGNAL", "Continue"))
 
     display_df <- df[, c("look_number", "look_date", "n_cases", "events_risk",
                          "events_control", "observed_RR", "z_statistic",
