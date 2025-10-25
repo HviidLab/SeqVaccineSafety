@@ -1,0 +1,12 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# Claude Code local settings
+.claude/
+
+# Generated simulation outputs
+scri_data_long.csv
+scri_data_wide.csv
+scri_simulation.RData
