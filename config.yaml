@@ -1,0 +1,381 @@
+# ==============================================================================
+# SeqVaccineSafety Configuration File
+# ==============================================================================
+# Central configuration for vaccine safety surveillance using SCRI designs
+# with sequential monitoring methods.
+#
+# Last modified: 2025-10-25
+# ==============================================================================
+
+default:
+  # ----------------------------------------------------------------------------
+  # SIMULATION SETTINGS
+  # ----------------------------------------------------------------------------
+  simulation:
+    # Population parameters
+    population_size: 20000
+      # Total number of vaccinated individuals to simulate
+
+    random_seed: 12345
+      # Set for reproducibility. Change to get different random datasets.
+      # Set to NULL or comment out for non-reproducible random generation.
+
+    # Event rate parameters
+    baseline_event_rate: 0.0002
+      # Background adverse event rate per person-day
+      # Example: 0.0002 = 2 events per 10,000 person-days
+
+    true_relative_risk: 1.5
+      # True underlying relative risk in the risk window
+      # RR = 1.0 means no increased risk
+      # RR = 1.5 means 50% increased risk in risk window
+      # RR = 2.0 means doubled risk
+
+    # Vaccination season parameters
+    season:
+      start_date: "2024-10-01"
+        # First day of vaccination season (YYYY-MM-DD)
+
+      end_date: "2025-03-31"
+        # Last day of vaccination season (YYYY-MM-DD)
+
+      vaccination_distribution: "exponential"
+        # How vaccinations are distributed over the season
+        # Options: "exponential" (front-loaded), "uniform" (evenly spread)
+
+    # Age distribution for population aged 65+
+    age_distribution:
+      age_65_74: 0.60
+        # Proportion in youngest age group
+
+      age_75_84: 0.30
+        # Proportion in middle age group
+
+      age_85_plus: 0.10
+        # Proportion in oldest age group
+      # Note: These must sum to 1.0
+
+  # ----------------------------------------------------------------------------
+  # SCRI DESIGN PARAMETERS
+  # ----------------------------------------------------------------------------
+  scri_design:
+    # Risk window definition (post-vaccination period of elevated risk)
+    risk_window:
+      start_day: 1
+        # First day post-vaccination to include (typically 1)
+
+      end_day: 28
+        # Last day post-vaccination to include (e.g., 28 = 4 weeks)
+        # Common choices: 7 (acute), 14 (short-term), 28 (medium-term), 42 (long-term)
+
+    # Control window definition (baseline comparison period)
+    control_window:
+      start_day: 29
+        # First day of control window (typically day after risk window ends)
+
+      end_day: 56
+        # Last day of control window
+        # Best practice: Same length as risk window for balanced comparison
+
+    # Window requirements
+    require_complete_windows: true
+      # If true, exclude individuals without complete risk AND control windows
+      # If false, allow partial windows (not recommended for SCRI)
+
+  # ----------------------------------------------------------------------------
+  # SEQUENTIAL ANALYSIS PARAMETERS
+  # ----------------------------------------------------------------------------
+  sequential_analysis:
+    # Type I error control
+    overall_alpha: 0.05
+      # Overall Type I error rate across all sequential looks
+      # Standard: 0.05 (5% false positive rate)
+      # Conservative: 0.01 (1% false positive rate)
+      # Liberal: 0.10 (10% false positive rate)
+
+    # Sequential monitoring schedule
+    number_of_looks: 8
+      # Total number of planned interim analyses
+      # More looks = more frequent monitoring but smaller alpha per look
+      # Typical range: 4-12 looks
+
+    look_interval_days: 14
+      # Days between sequential looks
+      # Common choices: 7 (weekly), 14 (biweekly), 28 (monthly)
+
+    minimum_cases_per_look: 20
+      # Minimum number of cases required to perform analysis at a look
+      # Ensures adequate sample size for statistical power
+      # Typical range: 10-50 cases
+
+    # Boundary method for sequential testing
+    boundary_method: "pocock"
+      # Options:
+      #   - "pocock": Equal alpha spending per look (constant boundary)
+      #   - "obrien-fleming": Conservative early, liberal late (increasing boundary)
+      #   - "haybittle-peto": Very conservative early (Z=3), final look uses all alpha
+      # Note: Currently only "pocock" is fully implemented
+
+    # Early stopping rules
+    stop_on_signal: true
+      # If true, stop monitoring immediately when signal is detected
+      # If false, continue all planned looks regardless
+
+    stop_for_futility: false
+      # If true, stop if no signal is likely even with future data
+      # Requires futility boundary calculation (not yet implemented)
+
+  # ----------------------------------------------------------------------------
+  # DASHBOARD SETTINGS
+  # ----------------------------------------------------------------------------
+  dashboard:
+    # Default values when dashboard opens
+    defaults:
+      alpha: 0.05
+      number_of_looks: 8
+      risk_window_start: 1
+      risk_window_end: 28
+      control_window_start: 29
+      control_window_end: 56
+      minimum_cases: 20
+
+    # Slider ranges for user input
+    ranges:
+      alpha:
+        min: 0.01
+        max: 0.10
+        step: 0.01
+
+      number_of_looks:
+        min: 4
+        max: 12
+        step: 1
+
+      risk_window_days:
+        min: 1
+        max: 42
+        step: 1
+
+      control_window_days:
+        min: 1
+        max: 84
+        step: 1
+
+      minimum_cases:
+        min: 10
+        max: 50
+        step: 5
+
+    # Visual alert thresholds
+    alert_thresholds:
+      relative_risk:
+        warning: 1.5
+          # RR above this triggers "Warning" color (orange)
+
+        critical: 2.0
+          # RR above this triggers "Critical" color (red)
+
+      proportion_in_risk:
+        warning: 0.60
+          # Proportion of events in risk window above this triggers warning
+
+  # ----------------------------------------------------------------------------
+  # OUTPUT SETTINGS
+  # ----------------------------------------------------------------------------
+  output:
+    # Directory for surveillance outputs
+    directory: "surveillance_outputs"
+      # Will be created if it doesn't exist
+
+    # File naming
+    timestamp_files: false
+      # If true, append timestamp to output filenames
+      # If false, overwrite previous outputs
+
+    # Plot specifications
+    plots:
+      dpi: 120
+        # Resolution in dots per inch
+        # Standard: 120, High quality: 300
+
+      monitoring_plot:
+        width: 10
+          # Width in inches
+
+        height: 8
+          # Height in inches
+
+        format: "png"
+          # Options: "png", "pdf", "svg"
+
+      timeline_plot:
+        width: 10
+        height: 6
+        format: "png"
+
+    # Report format
+    reports:
+      include_session_info: true
+        # If true, append R session info to text reports for reproducibility
+
+      decimal_places:
+        proportions: 3
+        relative_risk: 2
+        z_statistic: 3
+        p_value: 4
+
+  # ----------------------------------------------------------------------------
+  # DATA VALIDATION
+  # ----------------------------------------------------------------------------
+  validation:
+    check_duplicate_ids: true
+      # Warn if duplicate patient IDs are found
+
+    check_date_consistency: true
+      # Ensure event dates are after vaccination dates
+
+    check_window_calculations: true
+      # Verify days_to_event matches date arithmetic
+
+    warn_on_missing: true
+      # Warn about missing values in key columns
+
+    strict_mode: false
+      # If true, stop execution on validation warnings
+      # If false, only display warnings and continue
+
+  # ----------------------------------------------------------------------------
+  # ADVANCED OPTIONS
+  # ----------------------------------------------------------------------------
+  advanced:
+    # Parallel processing (future implementation)
+    use_parallel: false
+    num_cores: 1
+
+    # Caching (future implementation)
+    cache_results: false
+    cache_directory: ".cache"
+
+    # Logging
+    log_level: "INFO"
+      # Options: "DEBUG", "INFO", "WARNING", "ERROR"
+
+    log_file: "surveillance_log.txt"
+      # Set to NULL to disable file logging
+
+    verbose: true
+      # If true, print progress messages to console
+
+  # ----------------------------------------------------------------------------
+  # METADATA
+  # ----------------------------------------------------------------------------
+  metadata:
+    project_name: "SeqVaccineSafety"
+    version: "1.0.0"
+    description: "Sequential vaccine safety surveillance using SCRI designs"
+    contact: "your.email@example.com"
+    last_updated: "2025-10-25"
+
+# ==============================================================================
+# CONFIGURATION PROFILES
+# ==============================================================================
+# You can define alternative configurations for different scenarios.
+# To use a profile, call: config::get(config = "profile_name")
+#
+# Example profiles:
+
+conservative:
+  simulation:
+    population_size: 20000
+    baseline_event_rate: 0.0002
+    true_relative_risk: 1.5
+    random_seed: 12345
+    season:
+      start_date: "2024-10-01"
+      end_date: "2025-03-31"
+    age_distribution:
+      age_65_74: 0.60
+      age_75_84: 0.30
+      age_85_plus: 0.10
+  scri_design:
+    risk_window:
+      start_day: 1
+      end_day: 28
+    control_window:
+      start_day: 29
+      end_day: 56
+  sequential_analysis:
+    overall_alpha: 0.01      # More conservative
+    number_of_looks: 4       # Fewer looks
+    look_interval_days: 14
+    minimum_cases_per_look: 30
+    boundary_method: "pocock"
+  dashboard:
+    defaults:
+      alpha: 0.01
+      number_of_looks: 4
+    alert_thresholds:
+      relative_risk:
+        warning: 1.5
+        critical: 2.0
+  output:
+    directory: "surveillance_outputs"
+    plots:
+      dpi: 120
+      monitoring_plot:
+        width: 10
+        height: 8
+      timeline_plot:
+        width: 10
+        height: 6
+
+acute_events:
+  simulation:
+    population_size: 20000
+    baseline_event_rate: 0.0002
+    true_relative_risk: 2.0
+    random_seed: 12345
+    season:
+      start_date: "2024-10-01"
+      end_date: "2025-03-31"
+    age_distribution:
+      age_65_74: 0.60
+      age_75_84: 0.30
+      age_85_plus: 0.10
+  scri_design:
+    risk_window:
+      start_day: 1
+      end_day: 7           # Focus on first week
+    control_window:
+      start_day: 8
+      end_day: 14          # Match length
+  sequential_analysis:
+    overall_alpha: 0.05
+    number_of_looks: 8
+    look_interval_days: 7
+    minimum_cases_per_look: 15
+    boundary_method: "pocock"
+  dashboard:
+    defaults:
+      alpha: 0.05
+      number_of_looks: 8
+      risk_window_start: 1
+      risk_window_end: 7
+      control_window_start: 8
+      control_window_end: 14
+    alert_thresholds:
+      relative_risk:
+        warning: 1.5
+        critical: 2.0
+  output:
+    directory: "surveillance_outputs"
+    plots:
+      dpi: 120
+      monitoring_plot:
+        width: 10
+        height: 8
+      timeline_plot:
+        width: 10
+        height: 6
+
+# ==============================================================================
