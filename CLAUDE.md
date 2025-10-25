@@ -52,7 +52,36 @@ Simulated datasets should include:
 ## Sequential Analysis Parameters
 
 When implementing sequential designs, consider:
-- Alpha spending function for controlling Type I error
+- Alpha spending function for controlling Type I error (e.g., Pocock-type boundaries)
 - Number and timing of sequential looks
 - Stopping boundaries for detecting signals
 - Sample size and power calculations
+
+## Scripts in Repository
+
+### simulate_scri_dataset.R
+Generates simulated SCRI datasets for vaccine safety surveillance:
+- Creates cases-only data (individuals who experienced events)
+- Assigns events to risk or control windows based on configured relative risk
+- Outputs: scri_data_wide.csv, scri_data_long.csv, scri_simulation.RData
+
+### sequential_surveillance.R
+Performs sequential statistical monitoring on SCRI data:
+- Implements Pocock-type sequential boundaries
+- Conducts binomial test at each sequential look
+- Generates dashboard-ready outputs:
+  - Sequential monitoring plots
+  - Status reports
+  - Alert tables
+  - Timeline visualizations
+- Stops monitoring when safety signal is detected
+- Output directory: surveillance_outputs/
+
+## Dashboard Outputs
+
+The sequential surveillance system generates files suitable for public health dashboards:
+- **sequential_monitoring_results.csv** - Tabular results for all looks
+- **current_status_report.txt** - Human-readable status summary
+- **dashboard_alerts.csv** - Alert levels for key metrics
+- **sequential_monitoring_plot.png** - Test statistics vs. boundaries
+- **cases_timeline.png** - Cumulative cases and events over time

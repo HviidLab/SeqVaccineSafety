@@ -8,3 +8,6 @@
 
 # Generated simulation outputs (exclude large binary files)
 scri_simulation.RData
+
+# Generated surveillance outputs
+surveillance_outputs/
