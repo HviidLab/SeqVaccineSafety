@@ -5,7 +5,7 @@
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
 # Install and load required packages
-required_packages <- c("shiny", "shinydashboard", "ggplot2", "plotly", "DT", "fresh")
+required_packages <- c("config", "shiny", "shinydashboard", "ggplot2", "plotly", "DT", "fresh")
 
 for (pkg in required_packages) {
   if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
@@ -14,6 +14,13 @@ for (pkg in required_packages) {
     library(pkg, character.only = TRUE)
   }
 }
+
+# ============================================================================
+# LOAD CONFIGURATION
+# ============================================================================
+
+cat("Loading configuration from config.yaml...\n")
+cfg <- config::get(file = "config.yaml")
 
 # ============================================================================
 # UI DEFINITION
@@ -46,23 +53,38 @@ ui <- dashboardPage(
 
     sliderInput("alpha",
                 "Overall Alpha (Type I Error):",
-                min = 0.01, max = 0.10, value = 0.05, step = 0.01),
+                min = cfg$dashboard$ranges$alpha$min,
+                max = cfg$dashboard$ranges$alpha$max,
+                value = cfg$dashboard$defaults$alpha,
+                step = cfg$dashboard$ranges$alpha$step),
 
     sliderInput("n_looks",
                 "Number of Sequential Looks:",
-                min = 4, max = 12, value = 8, step = 1),
+                min = cfg$dashboard$ranges$number_of_looks$min,
+                max = cfg$dashboard$ranges$number_of_looks$max,
+                value = cfg$dashboard$defaults$number_of_looks,
+                step = cfg$dashboard$ranges$number_of_looks$step),
 
     sliderInput("risk_window",
                 "Risk Window (Days Post-Vaccination):",
-                min = 7, max = 42, value = c(1, 28)),
+                min = cfg$dashboard$ranges$risk_window_days$min,
+                max = cfg$dashboard$ranges$risk_window_days$max,
+                value = c(cfg$dashboard$defaults$risk_window_start,
+                         cfg$dashboard$defaults$risk_window_end)),
 
     sliderInput("control_window",
                 "Control Window (Days Post-Vaccination):",
-                min = 29, max = 84, value = c(29, 56)),
+                min = cfg$dashboard$ranges$control_window_days$min,
+                max = cfg$dashboard$ranges$control_window_days$max,
+                value = c(cfg$dashboard$defaults$control_window_start,
+                         cfg$dashboard$defaults$control_window_end)),
 
     sliderInput("min_cases",
                 "Minimum Cases Per Look:",
-                min = 10, max = 50, value = 20, step = 5),
+                min = cfg$dashboard$ranges$minimum_cases$min,
+                max = cfg$dashboard$ranges$minimum_cases$max,
+                value = cfg$dashboard$defaults$minimum_cases,
+                step = cfg$dashboard$ranges$minimum_cases$step),
 
     hr(),
 
@@ -504,7 +526,14 @@ server <- function(input, output, session) {
       # Get latest look with actual data (not planned future looks)
       latest <- results$results[results$results$data_available == TRUE, ]
       latest <- latest[nrow(latest), ]
-      color <- if (latest$observed_RR > 2.0) "red" else if (latest$observed_RR > 1.5) "orange" else "green"
+      # Use config thresholds for color coding
+      color <- if (latest$observed_RR > cfg$dashboard$alert_thresholds$relative_risk$critical) {
+        "red"
+      } else if (latest$observed_RR > cfg$dashboard$alert_thresholds$relative_risk$warning) {
+        "orange"
+      } else {
+        "green"
+      }
       valueBox(
         sprintf("%.2f", latest$observed_RR), "Observed Relative Risk",
         icon = icon("chart-line"), color = color
@@ -612,6 +641,10 @@ server <- function(input, output, session) {
 
     df <- results$results
 
+    # Get threshold values from config
+    rr_warning <- cfg$dashboard$alert_thresholds$relative_risk$warning
+    rr_critical <- cfg$dashboard$alert_thresholds$relative_risk$critical
+
     plot_ly(df) %>%
       add_trace(x = ~look_number, y = ~observed_RR, type = 'scatter', mode = 'lines+markers',
                 name = 'Observed RR', line = list(color = '#27ae60', width = 3),
@@ -619,9 +652,16 @@ server <- function(input, output, session) {
       add_trace(x = c(min(df$look_number), max(df$look_number)), y = c(1, 1),
                 type = 'scatter', mode = 'lines', name = 'RR = 1.0 (No Effect)',
                 line = list(color = 'black', width = 2, dash = 'dash')) %>%
-      add_trace(x = c(min(df$look_number), max(df$look_number)), y = c(1.5, 1.5),
-                type = 'scatter', mode = 'lines', name = 'RR = 1.5',
+      add_trace(x = c(min(df$look_number), max(df$look_number)),
+                y = c(rr_warning, rr_warning),
+                type = 'scatter', mode = 'lines',
+                name = sprintf('RR = %.1f (Warning)', rr_warning),
                 line = list(color = 'orange', width = 1, dash = 'dot')) %>%
+      add_trace(x = c(min(df$look_number), max(df$look_number)),
+                y = c(rr_critical, rr_critical),
+                type = 'scatter', mode = 'lines',
+                name = sprintf('RR = %.1f (Critical)', rr_critical),
+                line = list(color = 'red', width = 1, dash = 'dot')) %>%
       layout(
         title = list(text = "Observed Relative Risk Over Time", font = list(size = 16)),
         xaxis = list(title = "Sequential Look Number"),

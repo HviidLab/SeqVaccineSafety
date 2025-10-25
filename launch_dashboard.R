@@ -19,7 +19,7 @@ cat("Checking required packages...\n")
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
 # Required packages
-required_packages <- c("shiny", "shinydashboard", "ggplot2", "plotly", "DT", "fresh")
+required_packages <- c("config", "shiny", "shinydashboard", "ggplot2", "plotly", "DT", "fresh")
 
 # Check and install missing packages
 for (pkg in required_packages) {
@@ -31,12 +31,17 @@ for (pkg in required_packages) {
 
 cat("\nAll packages installed.\n\n")
 
+# Check for configuration file
+if (!file.exists("config.yaml")) {
+  stop("Error: config.yaml not found. Please ensure config.yaml is in the project root directory.")
+}
+
 # Check for data files
 if (!file.exists("scri_data_wide.csv")) {
   stop("Error: scri_data_wide.csv not found. Please run simulate_scri_dataset.R first.")
 }
 
-cat("Data files found.\n\n")
+cat("Configuration and data files found.\n\n")
 
 cat("Launching dashboard...\n")
 cat("The dashboard will open in your web browser.\n")

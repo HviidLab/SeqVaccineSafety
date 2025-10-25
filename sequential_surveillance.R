@@ -7,14 +7,27 @@
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
 # Load required packages
-if (!require("ggplot2")) {
+if (!require("config", quietly = TRUE)) {
+  cat("Installing 'config' package...\n")
+  install.packages("config")
+}
+library(config)
+
+if (!require("ggplot2", quietly = TRUE)) {
   cat("Installing 'ggplot2' package...\n")
   install.packages("ggplot2")
 }
 library(ggplot2)
 
+# ============================================================================
+# LOAD CONFIGURATION
+# ============================================================================
+
+cat("Loading configuration from config.yaml...\n")
+cfg <- config::get(file = "config.yaml")
+
 # Set working directory and create output folder
-output_dir <- file.path(getwd(), "surveillance_outputs")
+output_dir <- file.path(getwd(), cfg$output$directory)
 if (!dir.exists(output_dir)) {
   dir.create(output_dir)
 }
@@ -53,18 +66,20 @@ cat(sprintf("  Data range: %s to %s\n\n",
             max(cases_wide$event_date, na.rm = TRUE)))
 
 # ============================================================================
-# 2. SURVEILLANCE PARAMETERS
+# 2. SURVEILLANCE PARAMETERS (from config)
 # ============================================================================
 
 cat("Setting up surveillance parameters...\n")
 
 # Sequential monitoring parameters
-alpha <- 0.05          # Type I error (overall)
-n_looks <- 8           # Number of planned sequential looks
+alpha <- cfg$sequential_analysis$overall_alpha
+n_looks <- cfg$sequential_analysis$number_of_looks
 
-# SCRI window parameters (from simulation)
-risk_window_length <- 28
-control_window_length <- 28
+# SCRI window parameters (from config)
+risk_window_length <- cfg$scri_design$risk_window$end_day -
+                      cfg$scri_design$risk_window$start_day + 1
+control_window_length <- cfg$scri_design$control_window$end_day -
+                         cfg$scri_design$control_window$start_day + 1
 
 # Expected proportion under null (equal risk in both windows)
 p0 <- 0.5
@@ -88,7 +103,8 @@ cat("Defining sequential look schedule...\n")
 look_dates <- sort(unique(cases_wide$control_window_end))
 
 # Define looks at regular intervals
-min_cases_per_look <- 20
+min_cases_per_look <- cfg$sequential_analysis$minimum_cases_per_look
+look_interval <- cfg$sequential_analysis$look_interval_days
 look_schedule <- c()
 current_date <- min(look_dates)
 max_date <- max(look_dates)
@@ -98,7 +114,7 @@ while (current_date <= max_date) {
   if (nrow(available_cases) >= min_cases_per_look) {
     look_schedule <- c(look_schedule, as.character(current_date))
   }
-  current_date <- current_date + 14  # Look every 2 weeks
+  current_date <- current_date + look_interval
 }
 
 look_schedule <- unique(look_schedule)
@@ -272,7 +288,9 @@ cat("  - Current status report saved\n")
 
 # --- 5.3 Visualization: Sequential Monitoring Plot ---
 png(file.path(output_dir, "sequential_monitoring_plot.png"),
-    width = 10, height = 8, units = "in", res = 120)
+    width = cfg$output$plots$monitoring_plot$width,
+    height = cfg$output$plots$monitoring_plot$height,
+    units = "in", res = cfg$output$plots$dpi)
 
 par(mfrow = c(2, 1), mar = c(4, 4.5, 3, 2))
 
@@ -335,7 +353,9 @@ cat("  - Sequential monitoring plot saved\n")
 
 # --- 5.4 Visualization: Cases and Events Over Time ---
 png(file.path(output_dir, "cases_timeline.png"),
-    width = 10, height = 6, units = "in", res = 120)
+    width = cfg$output$plots$timeline_plot$width,
+    height = cfg$output$plots$timeline_plot$height,
+    units = "in", res = cfg$output$plots$dpi)
 
 par(mar = c(4, 4.5, 3, 2))
 

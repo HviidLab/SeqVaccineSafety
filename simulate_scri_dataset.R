@@ -3,43 +3,63 @@
 # Target population: Adults aged 65+ years
 # Single flu season, single dose per person
 
+# Set CRAN mirror
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
 # Load required packages
 # Note: sequentialdesign package is needed for formal sequential analysis
 # Install with: install.packages("sequentialdesign")
 # library(sequentialdesign)  # Uncomment when package is installed
 
-# Set seed for reproducibility
-set.seed(12345)
+# Load configuration management package
+if (!require("config", quietly = TRUE)) {
+  cat("Installing config package...\n")
+  install.packages("config")
+  library(config)
+}
 
 # ============================================================================
-# SIMULATION PARAMETERS
+# LOAD CONFIGURATION
+# ============================================================================
+
+cat("Loading configuration from config.yaml...\n")
+cfg <- config::get(file = "config.yaml")
+
+# Set seed for reproducibility
+if (!is.null(cfg$simulation$random_seed)) {
+  set.seed(cfg$simulation$random_seed)
+  cat(sprintf("Random seed set to: %d\n", cfg$simulation$random_seed))
+}
+
+# ============================================================================
+# SIMULATION PARAMETERS (from config)
 # ============================================================================
 
 # Population parameters
-n_patients <- 20000  # Number of individuals aged 65+
+n_patients <- cfg$simulation$population_size
 
 # Flu season timeframe
-season_start <- as.Date("2024-10-01")  # October 1
-season_end <- as.Date("2025-03-31")    # March 31
+season_start <- as.Date(cfg$simulation$season$start_date)
+season_end <- as.Date(cfg$simulation$season$end_date)
 season_length <- as.numeric(season_end - season_start)
 
 # SCRI time windows (in days)
-risk_window_start <- 1   # Day 1 post-vaccination
-risk_window_end <- 28    # Day 28 post-vaccination
-control_window_start <- 29  # Day 29 post-vaccination
-control_window_end <- 56    # Day 56 post-vaccination
+risk_window_start <- cfg$scri_design$risk_window$start_day
+risk_window_end <- cfg$scri_design$risk_window$end_day
+control_window_start <- cfg$scri_design$control_window$start_day
+control_window_end <- cfg$scri_design$control_window$end_day
 
 risk_window_length <- risk_window_end - risk_window_start + 1
 control_window_length <- control_window_end - control_window_start + 1
 
 # Event rate parameters (per person-day)
-baseline_event_rate <- 0.0002  # Background rate (0.02% per day)
-relative_risk <- 1.5           # RR in risk window (1.0 = null, >1 = elevated risk)
+baseline_event_rate <- cfg$simulation$baseline_event_rate
+relative_risk <- cfg$simulation$true_relative_risk
 
 # Sequential monitoring parameters
-alpha <- 0.05          # Overall Type I error
-n_looks <- 10          # Number of planned sequential looks
-look_interval <- 14    # Days between looks
+alpha <- cfg$sequential_analysis$overall_alpha
+n_looks <- cfg$sequential_analysis$number_of_looks
+look_interval <- cfg$sequential_analysis$look_interval_days
 
 # ============================================================================
 # GENERATE PATIENT POPULATION
@@ -53,12 +73,16 @@ patient_data <- data.frame(
 )
 
 # Generate age distribution (65+ years)
-# Using realistic distribution: more patients in 65-74 range
+# Using distribution from config
 age_groups <- sample(
   c("65-74", "75-84", "85+"),
   size = n_patients,
   replace = TRUE,
-  prob = c(0.60, 0.30, 0.10)  # Realistic age distribution
+  prob = c(
+    cfg$simulation$age_distribution$age_65_74,
+    cfg$simulation$age_distribution$age_75_84,
+    cfg$simulation$age_distribution$age_85_plus
+  )
 )
 
 patient_data$age_group <- age_groups
