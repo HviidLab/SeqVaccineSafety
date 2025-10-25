@@ -77,6 +77,25 @@ Performs sequential statistical monitoring on SCRI data:
 - Stops monitoring when safety signal is detected
 - Output directory: surveillance_outputs/
 
+### dashboard_app.R
+Interactive R Shiny dashboard for real-time vaccine safety monitoring:
+- **Features**:
+  - Interactive parameter controls (alpha, looks, window sizes)
+  - Real-time sequential analysis with instant updates
+  - Animated alert banners for signal detection
+  - Interactive Plotly visualizations (zoom, pan, hover)
+  - Color-coded value boxes for key metrics
+  - Automated recommendations for public health action
+  - Professional styling with custom CSS
+- **Usage**: Launch with `source("launch_dashboard.R")`
+- **Documentation**: See DASHBOARD_README.md for detailed guide
+
+### launch_dashboard.R
+Convenience script to launch the Shiny dashboard:
+- Checks and installs required packages automatically
+- Validates data files presence
+- Launches dashboard in default web browser
+
 ## Dashboard Outputs
 
 The sequential surveillance system generates files suitable for public health dashboards:
@@ -85,3 +104,16 @@ The sequential surveillance system generates files suitable for public health da
 - **dashboard_alerts.csv** - Alert levels for key metrics
 - **sequential_monitoring_plot.png** - Test statistics vs. boundaries
 - **cases_timeline.png** - Cumulative cases and events over time
+
+## Interactive Dashboard
+
+For real-time monitoring and parameter exploration, use the Shiny dashboard:
+```r
+source("launch_dashboard.R")
+```
+
+The dashboard provides:
+- Instant visual feedback on signal detection
+- Interactive parameter adjustment
+- Publication-ready visualizations
+- Automated decision support for public health officials

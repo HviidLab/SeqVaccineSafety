@@ -1,0 +1,656 @@
+# Influenza Vaccine Safety Sequential Surveillance Dashboard
+# Interactive Shiny application for public health monitoring
+
+# Set CRAN mirror
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
+# Install and load required packages
+required_packages <- c("shiny", "shinydashboard", "ggplot2", "plotly", "DT", "fresh")
+
+for (pkg in required_packages) {
+  if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
+    cat(sprintf("Installing %s...\n", pkg))
+    install.packages(pkg)
+    library(pkg, character.only = TRUE)
+  }
+}
+
+# ============================================================================
+# UI DEFINITION
+# ============================================================================
+
+ui <- dashboardPage(
+  skin = "blue",
+
+  # Header
+  dashboardHeader(
+    title = "Vaccine Safety Surveillance",
+    titleWidth = 350,
+    tags$li(class = "dropdown",
+            tags$style(HTML("
+              .main-header .logo { font-weight: bold; font-size: 20px; }
+              .main-header { background-color: #2c3e50; }
+            ")))
+  ),
+
+  # Sidebar
+  dashboardSidebar(
+    width = 350,
+    sidebarMenu(
+      menuItem("Dashboard", tabName = "dashboard", icon = icon("dashboard")),
+      menuItem("About", tabName = "about", icon = icon("info-circle"))
+    ),
+
+    hr(),
+    h4("Surveillance Parameters", style = "padding-left: 15px; color: white;"),
+
+    sliderInput("alpha",
+                "Overall Alpha (Type I Error):",
+                min = 0.01, max = 0.10, value = 0.05, step = 0.01),
+
+    sliderInput("n_looks",
+                "Number of Sequential Looks:",
+                min = 4, max = 12, value = 8, step = 1),
+
+    sliderInput("risk_window",
+                "Risk Window (Days Post-Vaccination):",
+                min = 7, max = 42, value = c(1, 28)),
+
+    sliderInput("control_window",
+                "Control Window (Days Post-Vaccination):",
+                min = 29, max = 84, value = c(29, 56)),
+
+    sliderInput("min_cases",
+                "Minimum Cases Per Look:",
+                min = 10, max = 50, value = 20, step = 5),
+
+    hr(),
+
+    actionButton("run_analysis", "Run Analysis",
+                 icon = icon("play"),
+                 class = "btn-primary btn-lg",
+                 style = "width: 90%; margin-left: 5%;"),
+
+    br(), br(),
+
+    div(style = "padding: 15px; background-color: #34495e; border-radius: 5px; margin: 10px;",
+        h5("Data Source:", style = "color: white; margin-top: 0;"),
+        p("Simulated SCRI data", style = "color: #bdc3c7; font-size: 12px;"),
+        p(textOutput("data_info"), style = "color: #ecf0f1; font-size: 11px;")
+    )
+  ),
+
+  # Main Body
+  dashboardBody(
+
+    # Custom CSS
+    tags$head(
+      tags$style(HTML("
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap');
+
+        body, .content-wrapper, .main-sidebar, .sidebar {
+          font-family: 'Roboto', sans-serif;
+        }
+
+        .value-box-custom {
+          border-radius: 8px;
+          box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .signal-alert {
+          background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+          color: white;
+          padding: 20px;
+          border-radius: 8px;
+          margin-bottom: 20px;
+          box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+          animation: pulse 2s infinite;
+        }
+
+        .no-signal {
+          background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+          color: white;
+          padding: 20px;
+          border-radius: 8px;
+          margin-bottom: 20px;
+          box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.85; }
+        }
+
+        .info-box {
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .box {
+          border-radius: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .small-box {
+          border-radius: 8px;
+        }
+
+        .recommendation-box {
+          background-color: #f8f9fa;
+          border-left: 4px solid #3498db;
+          padding: 15px;
+          margin: 10px 0;
+          border-radius: 4px;
+        }
+
+        .metric-label {
+          font-size: 14px;
+          color: #7f8c8d;
+          font-weight: 300;
+        }
+
+        .metric-value {
+          font-size: 32px;
+          font-weight: 700;
+          color: #2c3e50;
+        }
+      "))
+    ),
+
+    tabItems(
+      # Dashboard Tab
+      tabItem(tabName = "dashboard",
+
+        # Alert Banner
+        uiOutput("alert_banner"),
+
+        # Key Metrics Row
+        fluidRow(
+          valueBoxOutput("total_cases_box", width = 3),
+          valueBoxOutput("rr_box", width = 3),
+          valueBoxOutput("pvalue_box", width = 3),
+          valueBoxOutput("signal_box", width = 3)
+        ),
+
+        # Charts Row
+        fluidRow(
+          box(
+            title = "Sequential Monitoring: Test Statistics",
+            status = "primary",
+            solidHeader = TRUE,
+            width = 12,
+            plotlyOutput("monitoring_plot", height = "400px")
+          )
+        ),
+
+        fluidRow(
+          box(
+            title = "Relative Risk Over Time",
+            status = "info",
+            solidHeader = TRUE,
+            width = 6,
+            plotlyOutput("rr_plot", height = "350px")
+          ),
+
+          box(
+            title = "Cumulative Cases Timeline",
+            status = "info",
+            solidHeader = TRUE,
+            width = 6,
+            plotlyOutput("timeline_plot", height = "350px")
+          )
+        ),
+
+        # Results Table
+        fluidRow(
+          box(
+            title = "Sequential Analysis Results",
+            status = "primary",
+            solidHeader = TRUE,
+            width = 12,
+            DT::dataTableOutput("results_table")
+          )
+        ),
+
+        # Recommendations
+        fluidRow(
+          box(
+            title = "Recommendations for Public Health Action",
+            status = "warning",
+            solidHeader = TRUE,
+            width = 12,
+            uiOutput("recommendations")
+          )
+        )
+      ),
+
+      # About Tab
+      tabItem(tabName = "about",
+        fluidRow(
+          box(
+            title = "About This Dashboard",
+            status = "primary",
+            solidHeader = TRUE,
+            width = 12,
+            h3("Influenza Vaccine Safety Sequential Surveillance"),
+            p("This dashboard implements a Self-Controlled Risk Interval (SCRI) design with sequential monitoring for detecting vaccine safety signals in near-real-time."),
+
+            h4("Methodology"),
+            tags$ul(
+              tags$li("Design: SCRI (Self-Controlled Risk Interval)"),
+              tags$li("Population: Adults aged 65+ years"),
+              tags$li("Sequential Method: Pocock-type boundaries with equal alpha spending"),
+              tags$li("Test: Binomial test comparing risk vs control window events")
+            ),
+
+            h4("How It Works"),
+            tags$ol(
+              tags$li("Cases (individuals with adverse events) are identified"),
+              tags$li("Each case's event is classified as occurring in the risk window (days 1-28) or control window (days 29-56) post-vaccination"),
+              tags$li("Sequential looks are performed at regular intervals"),
+              tags$li("At each look, a statistical test compares the proportion of events in risk vs control windows"),
+              tags$li("If the test statistic exceeds the critical boundary, a safety signal is detected")
+            ),
+
+            h4("Interpretation"),
+            tags$ul(
+              tags$li(strong("No Signal:"), " Continue routine surveillance"),
+              tags$li(strong("Signal Detected:"), " Immediate investigation recommended"),
+              tags$li(strong("Relative Risk > 1:"), " More events in risk window than control window"),
+              tags$li(strong("P-value < Alpha:"), " Result is statistically significant")
+            ),
+
+            h4("Data Source"),
+            p("This dashboard uses simulated data generated from the SCRI simulation script. In production, this would connect to live surveillance data."),
+
+            h4("Repository"),
+            p(a("GitHub: HviidLab/SeqVaccineSafety",
+                href = "https://github.com/HviidLab/SeqVaccineSafety",
+                target = "_blank"))
+          )
+        )
+      )
+    )
+  )
+)
+
+# ============================================================================
+# SERVER LOGIC
+# ============================================================================
+
+server <- function(input, output, session) {
+
+  # Load data
+  cases_wide <- reactive({
+    data <- read.csv("scri_data_wide.csv", stringsAsFactors = FALSE)
+    data$control_window_end <- as.Date(data$control_window_end)
+    data$vaccination_date <- as.Date(data$vaccination_date)
+    data$event_date <- as.Date(data$event_date)
+    data
+  })
+
+  # Data info text
+  output$data_info <- renderText({
+    data <- cases_wide()
+    sprintf("%d cases, %d in risk window",
+            nrow(data),
+            sum(data$event_in_risk_window))
+  })
+
+  # Reactive analysis results
+  analysis_results <- eventReactive(input$run_analysis, {
+
+    data <- cases_wide()
+
+    # Get parameters
+    alpha <- input$alpha
+    n_looks <- input$n_looks
+    risk_start <- input$risk_window[1]
+    risk_end <- input$risk_window[2]
+    control_start <- input$control_window[1]
+    control_end <- input$control_window[2]
+    min_cases_per_look <- input$min_cases
+
+    risk_length <- risk_end - risk_start + 1
+    control_length <- control_end - control_start + 1
+
+    # Recalculate event assignments based on new windows
+    data$event_in_risk_window <- ifelse(
+      data$days_to_event >= risk_start & data$days_to_event <= risk_end, 1, 0
+    )
+
+    # Alpha spending
+    p0 <- 0.5
+    alpha_per_look <- alpha / n_looks
+    z_critical <- qnorm(1 - alpha_per_look)
+
+    # Define look schedule
+    look_dates <- sort(unique(data$control_window_end))
+    look_schedule <- c()
+    current_date <- min(look_dates)
+    max_date <- max(look_dates)
+
+    while (current_date <= max_date) {
+      available_cases <- data[data$control_window_end <= current_date, ]
+      if (nrow(available_cases) >= min_cases_per_look) {
+        look_schedule <- c(look_schedule, as.character(current_date))
+      }
+      current_date <- current_date + 14
+    }
+
+    look_schedule <- unique(look_schedule)
+    actual_looks <- min(length(look_schedule), n_looks)
+    if (actual_looks == 0) return(NULL)
+
+    look_schedule <- as.Date(look_schedule[1:actual_looks])
+
+    # Perform analysis at each look
+    results <- data.frame()
+    signal_detected_overall <- FALSE
+
+    for (look in 1:actual_looks) {
+      look_date <- look_schedule[look]
+      available_cases <- data[data$control_window_end <= look_date, ]
+      n_cases <- nrow(available_cases)
+
+      events_risk <- sum(available_cases$event_in_risk_window)
+      events_control <- n_cases - events_risk
+
+      prop_risk <- events_risk / n_cases
+      observed_RR <- ifelse(events_control > 0, events_risk / events_control, NA)
+
+      # Test statistic
+      se_prop <- sqrt(p0 * (1 - p0) / n_cases)
+      z_stat <- (prop_risk - p0) / se_prop
+      p_val <- 1 - pnorm(z_stat)
+
+      signal_detected <- (z_stat >= z_critical)
+
+      results <- rbind(results, data.frame(
+        look_number = look,
+        look_date = look_date,
+        n_cases = n_cases,
+        events_risk = events_risk,
+        events_control = events_control,
+        prop_risk = prop_risk,
+        observed_RR = observed_RR,
+        z_statistic = z_stat,
+        z_critical = z_critical,
+        p_value = p_val,
+        signal_detected = signal_detected
+      ))
+
+      if (signal_detected) {
+        signal_detected_overall <- TRUE
+        break
+      }
+    }
+
+    list(
+      results = results,
+      signal = signal_detected_overall,
+      alpha_per_look = alpha_per_look,
+      z_critical = z_critical,
+      risk_window = c(risk_start, risk_end),
+      control_window = c(control_start, control_end)
+    )
+  })
+
+  # Alert Banner
+  output$alert_banner <- renderUI({
+    results <- analysis_results()
+    if (is.null(results)) return(NULL)
+
+    if (results$signal) {
+      div(class = "signal-alert",
+          icon("exclamation-triangle", class = "fa-2x"),
+          h3("SAFETY SIGNAL DETECTED", style = "margin: 10px 0;"),
+          p("Immediate investigation recommended. Statistical threshold exceeded.")
+      )
+    } else {
+      div(class = "no-signal",
+          icon("check-circle", class = "fa-2x"),
+          h3("NO SIGNAL DETECTED", style = "margin: 10px 0;"),
+          p("Continue routine surveillance monitoring.")
+      )
+    }
+  })
+
+  # Value Boxes
+  output$total_cases_box <- renderValueBox({
+    results <- analysis_results()
+    if (is.null(results)) {
+      valueBox(
+        "—", "Total Cases", icon = icon("users"), color = "light-blue"
+      )
+    } else {
+      latest <- results$results[nrow(results$results), ]
+      valueBox(
+        latest$n_cases, "Total Cases Analyzed",
+        icon = icon("users"), color = "light-blue"
+      )
+    }
+  })
+
+  output$rr_box <- renderValueBox({
+    results <- analysis_results()
+    if (is.null(results)) {
+      valueBox(
+        "—", "Relative Risk", icon = icon("chart-line"), color = "purple"
+      )
+    } else {
+      latest <- results$results[nrow(results$results), ]
+      color <- if (latest$observed_RR > 2.0) "red" else if (latest$observed_RR > 1.5) "orange" else "green"
+      valueBox(
+        sprintf("%.2f", latest$observed_RR), "Observed Relative Risk",
+        icon = icon("chart-line"), color = color
+      )
+    }
+  })
+
+  output$pvalue_box <- renderValueBox({
+    results <- analysis_results()
+    if (is.null(results)) {
+      valueBox(
+        "—", "P-value", icon = icon("calculator"), color = "yellow"
+      )
+    } else {
+      latest <- results$results[nrow(results$results), ]
+      color <- if (latest$p_value < results$alpha_per_look) "red" else "green"
+      valueBox(
+        sprintf("%.4f", latest$p_value),
+        sprintf("P-value (α = %.4f)", results$alpha_per_look),
+        icon = icon("calculator"), color = color
+      )
+    }
+  })
+
+  output$signal_box <- renderValueBox({
+    results <- analysis_results()
+    if (is.null(results)) {
+      valueBox(
+        "—", "Signal Status", icon = icon("bell"), color = "light-blue"
+      )
+    } else {
+      if (results$signal) {
+        valueBox(
+          "YES", "Safety Signal", icon = icon("exclamation-triangle"), color = "red"
+        )
+      } else {
+        valueBox(
+          "NO", "Safety Signal", icon = icon("check"), color = "green"
+        )
+      }
+    }
+  })
+
+  # Monitoring Plot
+  output$monitoring_plot <- renderPlotly({
+    results <- analysis_results()
+    if (is.null(results)) return(NULL)
+
+    df <- results$results
+
+    plot_ly(df) %>%
+      add_trace(x = ~look_number, y = ~z_statistic, type = 'scatter', mode = 'lines+markers',
+                name = 'Z-Statistic', line = list(color = '#3498db', width = 3),
+                marker = list(size = 10, color = '#3498db')) %>%
+      add_trace(x = ~look_number, y = ~z_critical, type = 'scatter', mode = 'lines',
+                name = 'Critical Boundary', line = list(color = '#e74c3c', width = 2, dash = 'dash')) %>%
+      add_trace(x = c(min(df$look_number), max(df$look_number)), y = c(0, 0),
+                type = 'scatter', mode = 'lines', name = 'Null (No Effect)',
+                line = list(color = 'gray', width = 1, dash = 'dot')) %>%
+      layout(
+        title = list(text = "Sequential Test Statistics vs. Critical Boundary", font = list(size = 16)),
+        xaxis = list(title = "Sequential Look Number"),
+        yaxis = list(title = "Z-Statistic"),
+        hovermode = 'closest',
+        showlegend = TRUE,
+        legend = list(x = 0.02, y = 0.98)
+      )
+  })
+
+  # RR Plot
+  output$rr_plot <- renderPlotly({
+    results <- analysis_results()
+    if (is.null(results)) return(NULL)
+
+    df <- results$results
+
+    plot_ly(df) %>%
+      add_trace(x = ~look_number, y = ~observed_RR, type = 'scatter', mode = 'lines+markers',
+                name = 'Observed RR', line = list(color = '#27ae60', width = 3),
+                marker = list(size = 10, color = '#27ae60')) %>%
+      add_trace(x = c(min(df$look_number), max(df$look_number)), y = c(1, 1),
+                type = 'scatter', mode = 'lines', name = 'RR = 1.0 (No Effect)',
+                line = list(color = 'black', width = 2, dash = 'dash')) %>%
+      add_trace(x = c(min(df$look_number), max(df$look_number)), y = c(1.5, 1.5),
+                type = 'scatter', mode = 'lines', name = 'RR = 1.5',
+                line = list(color = 'orange', width = 1, dash = 'dot')) %>%
+      layout(
+        title = list(text = "Observed Relative Risk Over Time", font = list(size = 16)),
+        xaxis = list(title = "Sequential Look Number"),
+        yaxis = list(title = "Relative Risk"),
+        hovermode = 'closest',
+        showlegend = TRUE
+      )
+  })
+
+  # Timeline Plot
+  output$timeline_plot <- renderPlotly({
+    results <- analysis_results()
+    if (is.null(results)) return(NULL)
+
+    df <- results$results
+
+    plot_ly(df) %>%
+      add_trace(x = ~look_date, y = ~n_cases, type = 'scatter', mode = 'lines+markers',
+                name = 'Total Cases', line = list(color = '#3498db', width = 3),
+                marker = list(size = 8)) %>%
+      add_trace(x = ~look_date, y = ~events_risk, type = 'scatter', mode = 'lines+markers',
+                name = 'Risk Window Events', line = list(color = '#e74c3c', width = 2),
+                marker = list(size = 8, symbol = 'triangle-up')) %>%
+      add_trace(x = ~look_date, y = ~events_control, type = 'scatter', mode = 'lines+markers',
+                name = 'Control Window Events', line = list(color = '#27ae60', width = 2),
+                marker = list(size = 8, symbol = 'square')) %>%
+      layout(
+        title = list(text = "Cumulative Cases Over Time", font = list(size = 16)),
+        xaxis = list(title = "Date"),
+        yaxis = list(title = "Cumulative Count"),
+        hovermode = 'closest',
+        showlegend = TRUE
+      )
+  })
+
+  # Results Table
+  output$results_table <- DT::renderDataTable({
+    results <- analysis_results()
+    if (is.null(results)) return(NULL)
+
+    df <- results$results
+    df$look_date <- as.character(df$look_date)
+    df$observed_RR <- round(df$observed_RR, 2)
+    df$z_statistic <- round(df$z_statistic, 3)
+    df$p_value <- round(df$p_value, 4)
+    df$status <- ifelse(df$signal_detected, "SIGNAL", "Continue")
+
+    display_df <- df[, c("look_number", "look_date", "n_cases", "events_risk",
+                         "events_control", "observed_RR", "z_statistic",
+                         "p_value", "status")]
+
+    colnames(display_df) <- c("Look", "Date", "Cases", "Risk Events", "Control Events",
+                              "RR", "Z-stat", "P-value", "Status")
+
+    DT::datatable(display_df,
+                  options = list(pageLength = 10, dom = 't'),
+                  rownames = FALSE) %>%
+      DT::formatStyle('Status',
+                      backgroundColor = DT::styleEqual(c('SIGNAL', 'Continue'),
+                                                       c('#e74c3c', '#27ae60')),
+                      color = 'white',
+                      fontWeight = 'bold')
+  })
+
+  # Recommendations
+  output$recommendations <- renderUI({
+    results <- analysis_results()
+    if (is.null(results)) {
+      return(p("Run analysis to see recommendations."))
+    }
+
+    latest <- results$results[nrow(results$results), ]
+
+    if (results$signal) {
+      tagList(
+        div(class = "recommendation-box",
+            h4(icon("exclamation-circle"), " IMMEDIATE ACTIONS REQUIRED"),
+            tags$ol(
+              tags$li(strong("Detailed Case Review:"), " Review medical records for all ",
+                      latest$events_risk, " risk window cases. Assess severity and outcomes."),
+              tags$li(strong("Stratified Analysis:"), " Examine by age group (65-74, 75-84, 85+), comorbidities, and vaccine lot."),
+              tags$li(strong("Clinical Expert Panel:"), " Convene experts to assess biological plausibility and clinical significance."),
+              tags$li(strong("Regulatory Notification:"), " Immediately notify regulatory authorities of the detected signal."),
+              tags$li(strong("Risk Communication:"), " Prepare materials for healthcare providers and public communication."),
+              tags$li(strong("Risk-Benefit Assessment:"), " Evaluate whether vaccination should continue while investigating.")
+            )
+        ),
+        div(class = "recommendation-box",
+            h4(icon("info-circle"), " SIGNAL DETAILS"),
+            p(sprintf("Relative Risk: %.2f (%.0f%% increased risk in risk window)",
+                      latest$observed_RR, (latest$observed_RR - 1) * 100)),
+            p(sprintf("Statistical Significance: p = %.4f (threshold: %.4f)",
+                      latest$p_value, results$alpha_per_look)),
+            p(sprintf("Signal detected at Look %d on %s with %d cases",
+                      latest$look_number, latest$look_date, latest$n_cases))
+        )
+      )
+    } else {
+      tagList(
+        div(class = "recommendation-box",
+            h4(icon("check-circle"), " CONTINUE ROUTINE MONITORING"),
+            p("No safety signal detected at this time. Current recommendations:"),
+            tags$ul(
+              tags$li("Continue sequential surveillance as scheduled"),
+              tags$li("Monitor for changes in relative risk trends"),
+              tags$li("Maintain data quality and completeness"),
+              tags$li("Prepare for next scheduled look")
+            )
+        ),
+        div(class = "recommendation-box",
+            h4(icon("chart-line"), " CURRENT STATUS"),
+            p(sprintf("Relative Risk: %.2f", latest$observed_RR)),
+            p(sprintf("P-value: %.4f (threshold: %.4f)",
+                      latest$p_value, results$alpha_per_look)),
+            p(sprintf("Latest analysis: %s with %d cases",
+                      latest$look_date, latest$n_cases))
+        )
+      )
+    }
+  })
+}
+
+# ============================================================================
+# RUN APPLICATION
+# ============================================================================
+
+shinyApp(ui = ui, server = server)
