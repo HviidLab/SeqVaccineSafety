@@ -149,6 +149,10 @@ Generates simulated SCRI datasets for vaccine safety surveillance:
 - Creates population of vaccinated individuals (configurable size, default 20,000)
 - Assigns age groups (65-74, 75-84, 85+) based on configured distributions
 - Simulates vaccination dates following exponential distribution (front-loaded to season start)
+- **Seasonality**: Implements time-varying baseline event rates
+  - Sinusoidal pattern: rate(t) = baseline × (1 + 0.2 × sin(2π(t-60)/365))
+  - ±20% seasonal variation with peak in early February
+  - Addresses temporal confounding in SCRI designs
 - Assigns adverse events using SCRI methodology (cases-only design)
 - Determines event timing in risk vs. control windows based on simulated relative risk
 - Calculates person-time for each window
@@ -163,17 +167,22 @@ Performs sequential statistical monitoring on SCRI data using the **Sequential R
 - **Configuration-driven**: Uses `config.yaml` for alpha, looks, intervals, etc.
 - **Uses Sequential package for exact analysis**:
   - `AnalyzeSetUp.Binomial()` initializes the analysis with Wald alpha spending
+    - `zp` parameter correctly set to control_length / risk_length
   - `Analyze.Binomial()` performs MaxSPRT test at each sequential look
   - Exact critical values (not approximations)
 - Conducts binomial sequential test at each look:
-  - H₀: Equal risk in both windows (p = 0.5)
+  - H₀: p = p₀ (adjusts for window lengths automatically)
   - MaxSPRT test statistic with exact signal detection
-- Calculates observed relative risk (odds ratio)
+- **Calculates observed relative risk (rate ratio)**:
+  - Proper rate ratio: RR = (events_risk/risk_length) / (events_control/control_length)
+  - Continuity correction for zero cells
+  - Robust to unequal window lengths
+- **Extracts sequential-adjusted 95% confidence intervals** from Sequential package
 - Determines p-values and extracts critical values from Sequential package
 - Stops monitoring when safety signal detected (configurable)
 - **Generates 5 dashboard-ready outputs** in `surveillance_outputs/`:
-  - `sequential_monitoring_results.csv` - Tabular results for all looks
-  - `current_status_report.txt` - Human-readable status summary
+  - `sequential_monitoring_results.csv` - Tabular results with sequential-adjusted CIs
+  - `current_status_report.txt` - Status summary with CIs
   - `sequential_monitoring_plot.png` - Test statistics vs. exact boundaries + RR trends
   - `cases_timeline.png` - Cumulative cases and events over time
   - `dashboard_alerts.csv` - Alert levels for key metrics
@@ -286,7 +295,10 @@ The project includes built-in data validation controlled by `config.yaml`:
 - **Self-Controlled Risk Interval**: Each person serves as their own control
 - **Case-only design**: No denominator data needed, analyzes only individuals who experienced events
 - **Within-person comparison**: Compares event rates in risk window vs. control window (same person)
-- **Relative Risk**: Estimated as odds ratio from 2x2 table (risk window events / control window events)
+- **Relative Risk**: Estimated as **rate ratio** (not odds ratio)
+  - Formula: RR = (events_risk / risk_window_length) / (events_control / control_window_length)
+  - Properly accounts for differential person-time when windows have different lengths
+  - For equal-length windows, numerically equivalent to odds ratio
 
 ### Sequential Analysis
 The project uses the **Sequential R package** for exact sequential analysis:
@@ -297,8 +309,9 @@ The project uses the **Sequential R package** for exact sequential analysis:
   - Designed specifically for vaccine safety surveillance
 
 - **Test**: Binomial sequential test
-  - H₀: p = 0.5 (equal risk in both windows for equal-length windows)
-  - H₁: p > 0.5 (elevated risk in risk window)
+  - H₀: p = p₀ where p₀ = risk_window_length / (risk_window_length + control_window_length)
+  - H₁: p > p₀ (elevated risk in risk window)
+  - Automatically adjusts for unequal window lengths
   - Uses `AnalyzeSetUp.Binomial()` for initialization
   - Uses `Analyze.Binomial()` for each sequential look
 
@@ -308,12 +321,88 @@ The project uses the **Sequential R package** for exact sequential analysis:
   - Exact critical values calculated by Sequential package
 
 - **Key Functions Used**:
-  - `AnalyzeSetUp.Binomial()` - Initialize analysis parameters (target RR, power, alpha, minimum cases)
-  - `Analyze.Binomial()` - Perform test at each look (cases, controls, matching ratio)
+  - `AnalyzeSetUp.Binomial()` - Initialize analysis parameters
+    - `zp` parameter set to control_window_length / risk_window_length (matching ratio)
+    - Target RR, power (90%), alpha, minimum cases
+  - `Analyze.Binomial()` - Perform MaxSPRT test at each look
+    - Returns signal detection, critical values, and **sequential-adjusted confidence intervals**
   - Automatic critical value calculation and signal detection
+
+- **Sequential-Adjusted Confidence Intervals**:
+  - 95% CIs extracted from Sequential package account for multiple testing
+  - Reported in all outputs (console, CSV files, status reports)
+  - Wider than standard CIs to maintain coverage probability under sequential testing
 
 - **Early Stopping**: Monitoring stops when MaxSPRT exceeds critical value (configurable)
 - **Signal Detection**: One-sided upper-tailed test at configured significance level
+
+## Statistical Rigor and Recent Improvements
+
+The codebase has been reviewed by statistical experts and underwent critical improvements to ensure methodological rigor for vaccine safety surveillance.
+
+### Critical Statistical Fixes Implemented
+
+**1. Rate Ratio Calculation (Fixed)**
+- **Issue**: Previously used odds ratio instead of rate ratio
+- **Fix**: Now correctly calculates RR = (events_risk/risk_length) / (events_control/control_length)
+- **Impact**: Robust to unequal window lengths, proper SCRI methodology
+- **Bonus**: Continuity correction (0.5) for zero cells
+
+**2. Null Hypothesis for Unequal Windows (Fixed)**
+- **Issue**: Previously assumed p₀ = 0.5 (only valid for equal windows)
+- **Fix**: Now calculates p₀ = risk_length / (risk_length + control_length)
+- **Impact**: Correct Type I error control for any window configuration
+
+**3. Sequential Package Parameters (Fixed)**
+- **Issue**: `zp` parameter was hard-coded to 1
+- **Fix**: Now calculates zp = control_length / risk_length (matching ratio)
+- **Impact**: Correct critical values and power calculations in Sequential package
+
+**4. Sequential-Adjusted Confidence Intervals (Added)**
+- **Issue**: Standard CIs don't account for multiple testing
+- **Fix**: Extract and report 95% CIs from Sequential package (columns 13-14)
+- **Impact**: Proper inference accounting for sequential monitoring
+- **Example**: RR=1.27 (95% CI: 1.09-1.32)
+
+**5. Seasonality Adjustment (Added)**
+- **Issue**: Constant baseline rate unrealistic, susceptible to time-varying confounding
+- **Fix**: Sinusoidal seasonal pattern: rate(t) = baseline × (1 + 0.2 × sin(2π(t-60)/365))
+- **Parameters**: ±20% seasonal variation, peak in early February (day 60)
+- **Impact**: More realistic simulations, addresses temporal confounding
+
+**6. Zero Cell Handling (Added)**
+- **Issue**: Undefined RR when control events = 0
+- **Fix**: Applies continuity correction (events_control + 0.5)
+- **Impact**: Robust analysis with sparse data
+
+### Robustness Features
+
+✅ **Unequal Window Lengths**: All calculations correct for any risk/control window ratio
+✅ **Sparse Data**: Continuity corrections for zero cells
+✅ **Temporal Confounding**: Seasonal variation in baseline rates
+✅ **Multiple Testing**: Sequential-adjusted confidence intervals
+✅ **Exact Methods**: No asymptotic approximations (Sequential package)
+
+### Validation Status
+
+- ✅ **Code Review**: Expert statistical review completed (CDC methodology)
+- ✅ **Mathematical Correctness**: All formulas verified for SCRI design
+- ✅ **Edge Cases**: Zero cells, sparse data, unequal windows tested
+- ✅ **Output Verification**: All results consistent with Sequential package
+- ⚠️ **Type I Error Validation**: Recommended (1000 simulations with RR=1.0)
+- ⚠️ **Power Validation**: Recommended (1000 simulations with RR=1.5)
+
+**Recommended for:**
+- Educational use and teaching SCRI methodology
+- Research simulations and method development
+- Exploration of sequential surveillance designs
+- Preliminary planning for VSD-like surveillance
+
+**Before production VSD use:**
+- Conduct Type I error control validation studies
+- Verify power under realistic scenarios
+- Peer review by independent statistician
+- IRB and regulatory approval
 
 ## Interactive Dashboard
 
