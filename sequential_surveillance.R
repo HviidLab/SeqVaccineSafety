@@ -19,6 +19,12 @@ if (!require("ggplot2", quietly = TRUE)) {
 }
 library(ggplot2)
 
+if (!require("Sequential", quietly = TRUE)) {
+  cat("Installing 'Sequential' package...\n")
+  install.packages("Sequential")
+}
+library(Sequential)
+
 # ============================================================================
 # LOAD CONFIGURATION
 # ============================================================================
@@ -84,14 +90,48 @@ control_window_length <- cfg$scri_design$control_window$end_day -
 # Expected proportion under null (equal risk in both windows)
 p0 <- 0.5
 
-# Pocock-type alpha spending: spend alpha equally at each look
-alpha_per_look <- alpha / n_looks
-z_critical <- qnorm(1 - alpha_per_look)  # One-sided critical value
-
 cat(sprintf("  Alpha (Type I error): %.3f\n", alpha))
 cat(sprintf("  Number of planned looks: %d\n", n_looks))
-cat(sprintf("  Alpha per look (Pocock): %.4f\n", alpha_per_look))
-cat(sprintf("  Z critical value: %.3f\n\n", z_critical))
+
+# Set up formal sequential analysis using Sequential package
+# This uses exact sequential methods instead of approximations
+analysis_name <- "SCRI_Surveillance"
+RR_target <- cfg$simulation$true_relative_risk  # Target RR for power
+
+cat("  Setting up exact sequential analysis (Sequential package)...\n")
+
+# Clean up any previous analysis with same name
+analysis_dir <- file.path(output_dir, "sequential_setup")
+if (dir.exists(analysis_dir)) {
+  unlink(analysis_dir, recursive = TRUE)
+}
+dir.create(analysis_dir, showWarnings = FALSE)
+
+# Initialize Sequential analysis
+# Use total number of cases as maximum sample size
+max_N <- nrow(cases_wide)
+
+AnalyzeSetUp.Binomial(
+  name = analysis_name,
+  N = max_N,                       # Maximum sample size from simulation
+  alpha = alpha,                    # Overall Type I error
+  zp = 1,                          # Matching ratio (z=1 for SCRI, p=0.5)
+  M = cfg$sequential_analysis$minimum_cases_per_look,  # Min events before signal
+  AlphaSpendType = "Wald",         # Wald alpha spending function
+  power = 0.9,                     # Target power
+  RR = RR_target,                  # Relative risk to detect
+  Tailed = "upper",                # Upper-tailed test (elevated risk)
+  title = "SCRI Vaccine Safety Surveillance",
+  address = analysis_dir
+)
+
+cat("  Sequential analysis setup complete\n\n")
+
+# Calculate alpha per look and Z-critical for display/comparison purposes
+# (Note: Sequential package uses exact Wald spending, not simple Pocock)
+# This is used for plotting and display only - actual signal detection uses Sequential package
+alpha_per_look <- alpha / n_looks
+z_critical_display <- qnorm(1 - alpha_per_look)  # For visualization only
 
 # ============================================================================
 # 3. DEFINE SEQUENTIAL ANALYSIS SCHEDULE
@@ -147,7 +187,7 @@ surveillance_results <- data.frame(
   stringsAsFactors = FALSE
 )
 
-# Perform analysis at each look
+# Perform analysis at each look using Sequential package
 for (look in 1:actual_looks) {
   look_date <- look_schedule[look]
 
@@ -169,17 +209,34 @@ for (look in 1:actual_looks) {
     observed_RR <- NA
   }
 
-  # Perform binomial test
-  # H0: prop_risk = 0.5 (no difference between risk and control windows)
-  # Test statistic: standardized difference from expected
+  # Perform exact sequential binomial test using Sequential package
+  # Suppress console output from Sequential package
+  seq_result <- suppressMessages(Analyze.Binomial(
+    name = analysis_name,
+    test = look,
+    z = 1,                    # Matching ratio (z=1 for SCRI, implies p=0.5)
+    cases = events_risk,
+    controls = events_control
+  ))
+
+  # Extract results from Sequential package
+  # seq_result is a table with columns including "Reject H0" and "CV"
+  signal_detected <- if(!is.null(seq_result) && nrow(seq_result) > 0) {
+    seq_result[nrow(seq_result), "Reject H0"] == "Yes"
+  } else {
+    FALSE
+  }
+
+  z_critical <- if(!is.null(seq_result) && nrow(seq_result) > 0) {
+    seq_result[nrow(seq_result), "CV"]
+  } else {
+    NA
+  }
+
+  # Calculate test statistic and p-value for display
   se_prop <- sqrt(p0 * (1 - p0) / n_cases)
   z_stat <- (prop_risk - p0) / se_prop
-
-  # One-sided p-value
   p_val <- 1 - pnorm(z_stat)
-
-  # Check for signal
-  signal_detected <- (z_stat >= z_critical)
 
   # Store results
   surveillance_results <- rbind(surveillance_results, data.frame(
@@ -201,13 +258,13 @@ for (look in 1:actual_looks) {
               ifelse(is.na(observed_RR), 0, observed_RR), z_stat))
 
   if (signal_detected) {
-    cat("*** SIGNAL DETECTED ***\n")
+    cat("*** SIGNAL DETECTED (Sequential package) ***\n")
   } else {
     cat("No signal (p=%.4f)\n", p_val)
   }
 
-  # Stop if signal detected
-  if (signal_detected) {
+  # Stop if signal detected (if configured)
+  if (signal_detected && cfg$sequential_analysis$stop_on_signal) {
     cat("\n*** Safety signal detected! Surveillance stopped. ***\n\n")
     break
   }
@@ -299,12 +356,13 @@ plot(summary_table$look_number, summary_table$z_statistic,
      type = "b", pch = 19, col = "blue", lwd = 2.5,
      xlab = "Sequential Look Number",
      ylab = "Z-Statistic",
-     main = "Sequential Monitoring: Test Statistics vs. Critical Boundary",
-     ylim = c(-0.5, max(c(summary_table$z_statistic, z_critical), na.rm = TRUE) * 1.2),
+     main = "Sequential Monitoring: Test Statistics vs. Boundary (Sequential Package)",
+     ylim = c(-0.5, max(c(summary_table$z_statistic, z_critical_display), na.rm = TRUE) * 1.2),
      cex.main = 1.3, cex.lab = 1.1)
 
-# Add critical value line
-abline(h = z_critical, col = "red", lwd = 2.5, lty = 2)
+# Add approximate critical value line for reference
+# Note: Sequential package uses exact Wald spending; this is Pocock approximation for visualization
+abline(h = z_critical_display, col = "red", lwd = 2.5, lty = 2)
 
 # Add null hypothesis line
 abline(h = 0, col = "gray50", lwd = 1, lty = 3)

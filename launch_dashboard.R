@@ -19,7 +19,7 @@ cat("Checking required packages...\n")
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
 # Required packages
-required_packages <- c("config", "shiny", "shinydashboard", "ggplot2", "plotly", "DT", "fresh")
+required_packages <- c("config", "shiny", "shinydashboard", "ggplot2", "plotly", "DT", "fresh", "Sequential")
 
 # Check and install missing packages
 for (pkg in required_packages) {

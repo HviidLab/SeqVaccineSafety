@@ -5,7 +5,7 @@
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
 # Install and load required packages
-required_packages <- c("config", "shiny", "shinydashboard", "ggplot2", "plotly", "DT", "fresh")
+required_packages <- c("config", "shiny", "shinydashboard", "ggplot2", "plotly", "DT", "fresh", "Sequential")
 
 for (pkg in required_packages) {
   if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
@@ -261,8 +261,9 @@ ui <- dashboardPage(
             tags$ul(
               tags$li("Design: SCRI (Self-Controlled Risk Interval)"),
               tags$li("Population: Adults aged 65+ years"),
-              tags$li("Sequential Method: Pocock-type boundaries with equal alpha spending"),
-              tags$li("Test: Binomial test comparing risk vs control window events")
+              tags$li("Sequential Method: Exact sequential analysis using the Sequential R package"),
+              tags$li("Alpha Spending: Wald alpha spending function"),
+              tags$li("Test: Binomial test (MaxSPRT) comparing risk vs control window events")
             ),
 
             h4("How It Works"),
@@ -351,12 +352,35 @@ server <- function(input, output, session) {
     # This is crucial for correct look scheduling when user changes the control window
     data$control_window_end <- data$vaccination_date + control_end
 
-    # Alpha spending
     # CRITICAL: Null hypothesis proportion must account for different window lengths!
     # Under null (no elevated risk), events distribute proportional to observation time
     p0 <- risk_length / (risk_length + control_length)
-    alpha_per_look <- alpha / n_looks
-    z_critical <- qnorm(1 - alpha_per_look)
+
+    # Set up exact sequential analysis using Sequential package
+    analysis_name <- paste0("Dashboard_", Sys.time() |> as.numeric() |> round())
+    RR_target <- cfg$simulation$true_relative_risk
+
+    # Create temp directory for Sequential package setup files
+    temp_dir <- file.path(tempdir(), analysis_name)
+    dir.create(temp_dir, showWarnings = FALSE, recursive = TRUE)
+
+    # Use total number of cases as maximum sample size
+    max_N <- nrow(data)
+
+    # Initialize Sequential analysis with exact methods
+    AnalyzeSetUp.Binomial(
+      name = analysis_name,
+      N = max_N,                   # Maximum sample size from data
+      alpha = alpha,                # Overall Type I error
+      zp = 1,                      # Matching ratio (z=1 for SCRI, p=0.5)
+      M = min_cases_per_look,      # Min events before signal
+      AlphaSpendType = "Wald",     # Wald alpha spending function
+      power = 0.9,                 # Target power
+      RR = RR_target,              # Relative risk to detect
+      Tailed = "upper",            # Upper-tailed test (elevated risk)
+      title = "Dashboard SCRI Analysis",
+      address = temp_dir
+    )
 
     # Define look schedule - always plan for n_looks
     look_dates <- sort(unique(data$control_window_end))
@@ -387,9 +411,10 @@ server <- function(input, output, session) {
       nrow(available) >= min_cases_per_look
     })
 
-    # Perform analysis at each look (including planned future looks)
+    # Perform analysis at each look using Sequential package
     results <- data.frame()
     signal_detected_overall <- FALSE
+    z_critical <- NA  # Will be extracted from Sequential package results
 
     for (look in 1:n_looks) {
       look_date <- look_schedule[look]
@@ -409,12 +434,34 @@ server <- function(input, output, session) {
                              (events_risk / events_control) * (control_length / risk_length),
                              NA)
 
-        # Test statistic
+        # Perform exact sequential test using Sequential package
+        seq_result <- suppressMessages(Analyze.Binomial(
+          name = analysis_name,
+          test = look,
+          z = 1,                    # Matching ratio (z=1 for SCRI, implies p=0.5)
+          cases = events_risk,
+          controls = events_control
+        ))
+
+        # Extract results from Sequential package
+        # seq_result is a table with columns including "Reject H0" and "CV"
+        signal_detected <- if(!is.null(seq_result) && nrow(seq_result) > 0) {
+          seq_result[nrow(seq_result), "Reject H0"] == "Yes"
+        } else {
+          FALSE
+        }
+
+        z_critical <- if(!is.null(seq_result) && nrow(seq_result) > 0) {
+          seq_result[nrow(seq_result), "CV"]
+        } else {
+          NA
+        }
+
+        # Calculate test statistic and p-value for display
         se_prop <- sqrt(p0 * (1 - p0) / n_cases)
         z_stat <- (prop_risk - p0) / se_prop
         p_val <- 1 - pnorm(z_stat)
 
-        signal_detected <- (z_stat >= z_critical)
       } else {
         # Planned look but data not yet available
         n_cases <- NA
@@ -425,6 +472,7 @@ server <- function(input, output, session) {
         z_stat <- NA
         p_val <- NA
         signal_detected <- FALSE
+        # Keep z_critical from previous look if available
       }
 
       results <- rbind(results, data.frame(
@@ -468,10 +516,13 @@ server <- function(input, output, session) {
       }
     }
 
+    # Clean up temp directory
+    unlink(temp_dir, recursive = TRUE)
+
     list(
       results = results,
       signal = signal_detected_overall,
-      alpha_per_look = alpha_per_look,
+      alpha_per_look = alpha / n_looks,  # For display only
       z_critical = z_critical,
       risk_window = c(risk_start, risk_end),
       control_window = c(control_start, control_end)
