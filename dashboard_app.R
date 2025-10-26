@@ -367,12 +367,16 @@ server <- function(input, output, session) {
     # Use total number of cases as maximum sample size
     max_N <- nrow(data)
 
+    # Calculate matching ratio for Sequential package
+    # zp = control_persontime / risk_persontime
+    zp_ratio <- control_length / risk_length
+
     # Initialize Sequential analysis with exact methods
     AnalyzeSetUp.Binomial(
       name = analysis_name,
       N = max_N,                   # Maximum sample size from data
       alpha = alpha,                # Overall Type I error
-      zp = 1,                      # Matching ratio (z=1 for SCRI, p=0.5)
+      zp = zp_ratio,               # Matching ratio (control/risk persontime)
       M = min_cases_per_look,      # Min events before signal
       AlphaSpendType = "Wald",     # Wald alpha spending function
       power = 0.9,                 # Target power
@@ -428,11 +432,14 @@ server <- function(input, output, session) {
         events_control <- n_cases - events_risk
 
         prop_risk <- events_risk / n_cases
-        # RR must account for different window lengths!
+        # Calculate observed relative risk (rate ratio)
         # RR = (rate in risk) / (rate in control) = (events_risk/risk_length) / (events_control/control_length)
-        observed_RR <- ifelse(events_control > 0,
-                             (events_risk / events_control) * (control_length / risk_length),
-                             NA)
+        if (events_control > 0) {
+          observed_RR <- (events_risk / risk_length) / (events_control / control_length)
+        } else {
+          # Apply continuity correction for zero cells
+          observed_RR <- (events_risk / risk_length) / ((events_control + 0.5) / control_length)
+        }
 
         # Perform exact sequential test using Sequential package
         seq_result <- suppressMessages(Analyze.Binomial(
@@ -444,7 +451,7 @@ server <- function(input, output, session) {
         ))
 
         # Extract results from Sequential package
-        # seq_result is a table with columns including "Reject H0" and "CV"
+        # seq_result is a table with columns including "Reject H0", "CV", and CI bounds
         signal_detected <- if(!is.null(seq_result) && nrow(seq_result) > 0) {
           seq_result[nrow(seq_result), "Reject H0"] == "Yes"
         } else {
@@ -453,6 +460,22 @@ server <- function(input, output, session) {
 
         z_critical <- if(!is.null(seq_result) && nrow(seq_result) > 0) {
           seq_result[nrow(seq_result), "CV"]
+        } else {
+          NA
+        }
+
+        # Extract sequential-adjusted confidence intervals
+        # Use column indexing to handle spaces in column names
+        # Sequential package output: Test, Cases, Controls, Cumul Cases, Cumul Controls, E[Cases|H0],
+        # RR estimate, LLR, target, actual, CV, Reject H0, Lower limit, Upper limit
+        RR_CI_lower <- if(!is.null(seq_result) && nrow(seq_result) > 0 && ncol(seq_result) >= 13) {
+          as.numeric(seq_result[nrow(seq_result), 13])  # "Lower limit" is column 13
+        } else {
+          NA
+        }
+
+        RR_CI_upper <- if(!is.null(seq_result) && nrow(seq_result) > 0 && ncol(seq_result) >= 14) {
+          as.numeric(seq_result[nrow(seq_result), 14])  # "Upper limit" is column 14
         } else {
           NA
         }
@@ -469,6 +492,8 @@ server <- function(input, output, session) {
         events_control <- NA
         prop_risk <- NA
         observed_RR <- NA
+        RR_CI_lower <- NA
+        RR_CI_upper <- NA
         z_stat <- NA
         p_val <- NA
         signal_detected <- FALSE
@@ -483,6 +508,8 @@ server <- function(input, output, session) {
         events_control = events_control,
         prop_risk = prop_risk,
         observed_RR = observed_RR,
+        RR_CI_lower = RR_CI_lower,       # Sequential-adjusted CI
+        RR_CI_upper = RR_CI_upper,       # Sequential-adjusted CI
         z_statistic = z_stat,
         z_critical = z_critical,
         p_value = p_val,
@@ -504,6 +531,8 @@ server <- function(input, output, session) {
               events_control = NA,
               prop_risk = NA,
               observed_RR = NA,
+              RR_CI_lower = NA,
+              RR_CI_upper = NA,
               z_statistic = NA,
               z_critical = z_critical,
               p_value = NA,

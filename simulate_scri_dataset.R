@@ -163,7 +163,7 @@ patient_data <- patient_data[
 cat(sprintf("Patients with complete risk and control windows: %d\n", nrow(patient_data)))
 
 # ============================================================================
-# SIMULATE ADVERSE EVENTS (CASES ONLY - SCRI DESIGN)
+# SIMULATE ADVERSE EVENTS WITH SEASONALITY (CASES ONLY - SCRI DESIGN)
 # ============================================================================
 
 cat("Simulating adverse events using SCRI design...\n")
@@ -171,17 +171,48 @@ cat("Simulating adverse events using SCRI design...\n")
 # In SCRI, we only include CASES (individuals who experienced the event)
 # For each case, we determine if the event occurred in risk or control window
 
-# Expected number of cases based on event rate
+# Add seasonal variation to baseline event rate
+# Model: rate(t) = baseline * (1 + amplitude * sin(2π * (t - peak) / 365))
+# This creates seasonal peaks and troughs in event rates
+# Peak typically in winter months (day ~60 = early February)
+
+# Seasonal parameters (optional, can be disabled by setting amplitude = 0)
+seasonal_amplitude <- 0.2  # 20% seasonal variation (±20% around baseline)
+seasonal_peak_day <- 60    # Peak in early February (day 60 of flu season)
+
+# Function to calculate time-varying event rate
+get_seasonal_rate <- function(date, baseline_rate, amplitude, peak_day, season_start) {
+  days_since_start <- as.numeric(date - season_start)
+  # Sinusoidal seasonal pattern with period = 365 days
+  seasonal_multiplier <- 1 + amplitude * sin(2 * pi * (days_since_start - peak_day) / 365)
+  return(baseline_rate * seasonal_multiplier)
+}
+
+# Calculate expected cases accounting for:
+# 1. Elevated risk in risk window (relative_risk)
+# 2. Seasonal variation in baseline rate (time-varying)
+
+# For simplicity, use average seasonal rate over the season
+# (More sophisticated: integrate over actual person-time distribution)
+mid_season_date <- season_start + season_length / 2
+avg_seasonal_rate <- get_seasonal_rate(mid_season_date, baseline_event_rate,
+                                       seasonal_amplitude, seasonal_peak_day, season_start)
+
 # Total person-time across both windows
 total_persontime <- sum(patient_data$risk_persontime) + sum(patient_data$control_persontime)
 
 # Expected rate accounting for elevated risk in risk window
 # This is a weighted average
-expected_cases <- baseline_event_rate * total_persontime *
+expected_cases <- avg_seasonal_rate * total_persontime *
   (1 + (relative_risk - 1) * sum(patient_data$risk_persontime) / total_persontime)
 
 # Generate actual number of cases (Poisson-distributed)
 n_cases <- rpois(1, expected_cases)
+
+cat(sprintf("Baseline event rate: %.5f per person-day\n", baseline_event_rate))
+cat(sprintf("Seasonal variation: ±%.0f%% (peak day %d)\n",
+            seasonal_amplitude * 100, seasonal_peak_day))
+cat(sprintf("Average seasonal rate: %.5f per person-day\n", avg_seasonal_rate))
 
 cat(sprintf("Generating %d cases from population of %d...\n", n_cases, nrow(patient_data)))
 
@@ -324,13 +355,16 @@ cat(sprintf("  Events in risk window: %d (%.1f%%)\n",
 cat(sprintf("  Events in control window: %d (%.1f%%)\n",
             n_events_control, 100 * n_events_control / nrow(cases_data)))
 
-# Observed odds ratio (used in SCRI)
-# OR = (events in risk) / (events in control)
-obs_odds_ratio <- n_events_risk / n_events_control
+# Observed rate ratio (used in SCRI)
+# RR = (events_risk / risk_persontime) / (events_control / control_persontime)
+# For equal-length windows, this simplifies to events_risk / events_control
+obs_rate_ratio <- (n_events_risk / risk_window_length) / (n_events_control / control_window_length)
 
-cat(sprintf("\nObserved odds ratio (risk/control): %.2f\n", obs_odds_ratio))
-cat(sprintf("Expected odds ratio (under true RR=%.2f): %.2f\n",
+cat(sprintf("\nObserved rate ratio (risk/control): %.2f\n", obs_rate_ratio))
+cat(sprintf("Expected rate ratio (under true RR=%.2f): %.2f\n",
             relative_risk, relative_risk))
+cat(sprintf("Note: For equal-length windows (%d days each), RR = OR = %.2f\n",
+            risk_window_length, n_events_risk / n_events_control))
 
 # Age distribution of cases
 cat("\nAge group distribution of cases:\n")

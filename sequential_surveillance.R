@@ -87,8 +87,10 @@ risk_window_length <- cfg$scri_design$risk_window$end_day -
 control_window_length <- cfg$scri_design$control_window$end_day -
                          cfg$scri_design$control_window$start_day + 1
 
-# Expected proportion under null (equal risk in both windows)
-p0 <- 0.5
+# Expected proportion under null (no elevated risk)
+# Under H0, events distribute proportional to observation time
+# p0 = risk_persontime / (risk_persontime + control_persontime)
+p0 <- risk_window_length / (risk_window_length + control_window_length)
 
 cat(sprintf("  Alpha (Type I error): %.3f\n", alpha))
 cat(sprintf("  Number of planned looks: %d\n", n_looks))
@@ -111,11 +113,17 @@ dir.create(analysis_dir, showWarnings = FALSE)
 # Use total number of cases as maximum sample size
 max_N <- nrow(cases_wide)
 
+# Calculate matching ratio for Sequential package
+# zp = control_persontime / risk_persontime
+# For equal windows: zp = 1 (p = 0.5)
+# For unequal windows: zp = control_length / risk_length
+zp_ratio <- control_window_length / risk_window_length
+
 AnalyzeSetUp.Binomial(
   name = analysis_name,
   N = max_N,                       # Maximum sample size from simulation
   alpha = alpha,                    # Overall Type I error
-  zp = 1,                          # Matching ratio (z=1 for SCRI, p=0.5)
+  zp = zp_ratio,                   # Matching ratio (control/risk persontime)
   M = cfg$sequential_analysis$minimum_cases_per_look,  # Min events before signal
   AlphaSpendType = "Wald",         # Wald alpha spending function
   power = 0.9,                     # Target power
@@ -180,6 +188,8 @@ surveillance_results <- data.frame(
   events_control = integer(),
   prop_risk = numeric(),
   observed_RR = numeric(),
+  RR_CI_lower = numeric(),          # Sequential-adjusted lower CI
+  RR_CI_upper = numeric(),          # Sequential-adjusted upper CI
   z_statistic = numeric(),
   z_critical = numeric(),
   p_value = numeric(),
@@ -202,11 +212,13 @@ for (look in 1:actual_looks) {
   # Observed proportion in risk window
   prop_risk <- events_risk / n_cases
 
-  # Calculate observed relative risk (odds ratio)
+  # Calculate observed relative risk (rate ratio)
+  # RR = (events_risk / risk_window_length) / (events_control / control_window_length)
   if (events_control > 0) {
-    observed_RR <- events_risk / events_control
+    observed_RR <- (events_risk / risk_window_length) / (events_control / control_window_length)
   } else {
-    observed_RR <- NA
+    # Apply continuity correction for zero cells
+    observed_RR <- (events_risk / risk_window_length) / ((events_control + 0.5) / control_window_length)
   }
 
   # Perform exact sequential binomial test using Sequential package
@@ -220,7 +232,7 @@ for (look in 1:actual_looks) {
   ))
 
   # Extract results from Sequential package
-  # seq_result is a table with columns including "Reject H0" and "CV"
+  # seq_result is a table with columns including "Reject H0", "CV", and CI bounds
   signal_detected <- if(!is.null(seq_result) && nrow(seq_result) > 0) {
     seq_result[nrow(seq_result), "Reject H0"] == "Yes"
   } else {
@@ -229,6 +241,22 @@ for (look in 1:actual_looks) {
 
   z_critical <- if(!is.null(seq_result) && nrow(seq_result) > 0) {
     seq_result[nrow(seq_result), "CV"]
+  } else {
+    NA
+  }
+
+  # Extract sequential-adjusted confidence intervals for RR
+  # Use column indexing to handle spaces in column names
+  # Sequential package output: Test, Cases, Controls, Cumul Cases, Cumul Controls, E[Cases|H0],
+  # RR estimate, LLR, target, actual, CV, Reject H0, Lower limit, Upper limit
+  RR_CI_lower <- if(!is.null(seq_result) && nrow(seq_result) > 0 && ncol(seq_result) >= 13) {
+    as.numeric(seq_result[nrow(seq_result), 13])  # "Lower limit" is column 13
+  } else {
+    NA
+  }
+
+  RR_CI_upper <- if(!is.null(seq_result) && nrow(seq_result) > 0 && ncol(seq_result) >= 14) {
+    as.numeric(seq_result[nrow(seq_result), 14])  # "Upper limit" is column 14
   } else {
     NA
   }
@@ -247,15 +275,20 @@ for (look in 1:actual_looks) {
     events_control = events_control,
     prop_risk = prop_risk,
     observed_RR = observed_RR,
+    RR_CI_lower = RR_CI_lower,       # Sequential-adjusted CI
+    RR_CI_upper = RR_CI_upper,       # Sequential-adjusted CI
     z_statistic = z_stat,
     z_critical = z_critical,
     p_value = p_val,
     signal_detected = signal_detected
   ))
 
-  cat(sprintf("Look %d (%s): n=%d, risk=%d, control=%d, RR=%.2f, Z=%.2f, ",
+  cat(sprintf("Look %d (%s): n=%d, risk=%d, control=%d, RR=%.2f (95%% CI: %.2f-%.2f), Z=%.2f, ",
               look, look_date, n_cases, events_risk, events_control,
-              ifelse(is.na(observed_RR), 0, observed_RR), z_stat))
+              ifelse(is.na(observed_RR), 0, observed_RR),
+              ifelse(is.na(RR_CI_lower), 0, RR_CI_lower),
+              ifelse(is.na(RR_CI_upper), 0, RR_CI_upper),
+              z_stat))
 
   if (signal_detected) {
     cat("*** SIGNAL DETECTED (Sequential package) ***\n")
@@ -332,6 +365,8 @@ cat(sprintf("Events in Control Window (Days 29-56): %d (%.1f%%)\n",
             100 * status_report$events_in_control_window / status_report$total_cases_analyzed))
 cat("\n--- STATISTICAL ANALYSIS ---\n")
 cat(sprintf("Observed Relative Risk: %.2f\n", status_report$observed_relative_risk))
+cat(sprintf("95%% CI (Sequential-Adjusted): %.2f - %.2f\n",
+            latest_look$RR_CI_lower, latest_look$RR_CI_upper))
 cat(sprintf("P-value: %.4f\n", status_report$p_value))
 cat(sprintf("Alpha threshold (Pocock): %.4f\n", alpha_per_look))
 cat("\n--- SIGNAL STATUS ---\n")
