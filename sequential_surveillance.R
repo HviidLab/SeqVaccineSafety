@@ -7,23 +7,20 @@
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
 # Load required packages
-if (!require("config", quietly = TRUE)) {
-  cat("Installing 'config' package...\n")
-  install.packages("config")
-}
-library(config)
+required_packages <- c("config", "ggplot2", "Sequential")
 
-if (!require("ggplot2", quietly = TRUE)) {
-  cat("Installing 'ggplot2' package...\n")
-  install.packages("ggplot2")
+for (pkg in required_packages) {
+  if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
+    cat(sprintf("Installing '%s' package...\n", pkg))
+    install.packages(pkg)
+    library(pkg, character.only = TRUE)
+  }
 }
-library(ggplot2)
 
-if (!require("Sequential", quietly = TRUE)) {
-  cat("Installing 'Sequential' package...\n")
-  install.packages("Sequential")
-}
-library(Sequential)
+cat("Required packages loaded:\n")
+cat("  - config (configuration management)\n")
+cat("  - ggplot2 (visualization)\n")
+cat("  - Sequential (exact sequential analysis)\n\n")
 
 # ============================================================================
 # LOAD CONFIGURATION

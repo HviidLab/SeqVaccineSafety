@@ -7,16 +7,18 @@
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
 # Load required packages
-# Note: sequentialdesign package is needed for formal sequential analysis
-# Install with: install.packages("sequentialdesign")
-# library(sequentialdesign)  # Uncomment when package is installed
-
-# Load configuration management package
 if (!require("config", quietly = TRUE)) {
   cat("Installing config package...\n")
   install.packages("config")
   library(config)
 }
+
+# Load SequentialDesign package if needed
+if (!require("SequentialDesign", quietly = TRUE)) {
+  cat("Installing SequentialDesign package...\n")
+  install.packages("SequentialDesign")
+}
+library(SequentialDesign)
 
 # ============================================================================
 # LOAD CONFIGURATION
@@ -30,6 +32,24 @@ if (!is.null(cfg$simulation$random_seed)) {
   set.seed(cfg$simulation$random_seed)
   cat(sprintf("Random seed set to: %d\n", cfg$simulation$random_seed))
 }
+
+# Check simulation method
+simulation_method <- cfg$simulation$method
+if (is.null(simulation_method)) {
+  simulation_method <- "custom"  # Default to custom method
+}
+
+cat(sprintf("\nSimulation method: %s\n", simulation_method))
+
+# Branch based on simulation method
+if (simulation_method == "sequential_design") {
+  cat("\n=== USING SequentialDesign PACKAGE ===\n\n")
+  source("simulate_scri_sequential_design.R")
+  quit(save = "no")
+}
+
+# Otherwise continue with custom simulation
+cat("\n=== USING CUSTOM SIMULATION METHOD ===\n\n")
 
 # ============================================================================
 # SIMULATION PARAMETERS (from config)

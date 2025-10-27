@@ -31,11 +31,28 @@ This is an RStudio project (`.Rproj` file present). The project uses:
 - `DT` - Interactive data tables
 - `fresh` - Dashboard styling and theming
 - **`Sequential`** - Exact sequential analysis using MaxSPRT for vaccine safety surveillance
+- **`SequentialDesign`** - Simulation framework for Type I error and power validation studies
 
-**Sequential Analysis Package**:
-The project uses the `Sequential` R package (Kulldorff & Silva) for formal sequential statistical analysis. This package was developed for the CDC's Vaccine Safety Datalink and provides exact sequential methods (not approximations) for post-market vaccine safety surveillance using the Maximized Sequential Probability Ratio Test (MaxSPRT).
+**Sequential Analysis Packages**:
+The project integrates two complementary packages:
 
-**Installation**: All required packages are automatically installed if missing when running `launch_dashboard.R`.
+1. **Sequential Package** (Kulldorff & Silva):
+   - Exact sequential analysis methods (not approximations)
+   - MaxSPRT (Maximized Sequential Probability Ratio Test)
+   - Developed for CDC's Vaccine Safety Datalink
+   - Wald alpha spending for optimal statistical properties
+   - Automatic critical value calculations and sequential-adjusted confidence intervals
+   - Used in: `sequential_surveillance.R`, `dashboard_app.R`
+
+2. **SequentialDesign Package** (Maro & Hou):
+   - Simulation framework for observational database studies
+   - Type I error control validation (1000+ simulations with RR=1.0)
+   - Power validation studies (1000+ simulations with RR=1.5, 2.0)
+   - Misclassification modeling (sensitivity, PPV)
+   - Multiple strata support
+   - Used in: `validate_surveillance.R` (validation mode only)
+
+**Installation**: All required packages are automatically installed if missing when running `launch_dashboard.R` or any analysis script.
 
 ## Development Environment
 
@@ -47,23 +64,35 @@ The project uses the `Sequential` R package (Kulldorff & Silva) for formal seque
 ### Installing Dependencies
 ```r
 # Manual installation if needed:
-install.packages(c("config", "ggplot2", "shiny", "shinydashboard", "plotly", "DT", "fresh", "Sequential"))
+install.packages(c("config", "ggplot2", "shiny", "shinydashboard", "plotly", "DT", "fresh", "Sequential", "SequentialDesign"))
 ```
 
-### Important Note on Sequential Package
-The `Sequential` package is **essential** for this project. It provides:
-- Exact sequential analysis methods (not approximations)
-- MaxSPRT (Maximized Sequential Probability Ratio Test)
-- Designed specifically for vaccine safety surveillance (CDC Vaccine Safety Datalink)
-- Wald alpha spending for optimal statistical properties
-- Automatic critical value calculations based on cumulative data
-
 ### Standard Analysis Workflow
-1. Edit `config.yaml` to set parameters for your analysis
-2. Run `simulate_scri_dataset.R` → generates CSV and RData files
-3. Run `sequential_surveillance.R` → generates outputs in `surveillance_outputs/`
-4. Run `launch_dashboard.R` → opens interactive dashboard
-5. Adjust parameters in dashboard → see results instantly
+
+**Primary Workflow (Custom Simulation)**:
+1. Ensure `config.yaml` has `simulation.method: "custom"` (default)
+2. Edit other parameters in `config.yaml` for your analysis
+3. Run `simulate_scri_dataset.R` → generates CSV and RData files
+4. Run `sequential_surveillance.R` → generates outputs in `surveillance_outputs/`
+5. Run `launch_dashboard.R` → opens interactive dashboard
+6. Adjust parameters in dashboard → see results instantly
+
+**Validation Workflow (SequentialDesign for Type I Error/Power Studies)**:
+1. Edit `config.yaml` to set `simulation.sequential_design.n_simulations: 1000` (or higher)
+2. Configure strata, event rates, and misclassification parameters
+3. Run `validate_surveillance.R` → performs 3 scenarios (RR=1.0, 1.5, 2.0)
+4. Review validation reports in `surveillance_outputs/validation_results/`
+5. Use results to assess system performance and update documentation
+
+**Simulation Method Selection**:
+- **Custom method** (`method: "custom"`): Transparent, educational simulation with seasonality
+  - Best for: Single datasets, teaching, research, exploratory analysis
+  - Strengths: Clear code, flexible parameters, seasonal modeling
+
+- **SequentialDesign method** (`method: "sequential_design"`): Standardized simulation framework
+  - Best for: Large-scale validation (1000+ sims), power studies, Type I error checks
+  - Strengths: Misclassification modeling, multiple strata, formal validation
+  - Note: Primarily used via `validate_surveillance.R`, not directly in main workflow
 
 ## Centralized Configuration System
 
@@ -118,25 +147,29 @@ When implementing sequential designs, consider:
 
 ```
 SeqVaccineSafety/
-├── config.yaml                      # Centralized configuration (single source of truth)
+├── config.yaml                           # Centralized configuration (single source of truth)
 ├── Main Analysis Scripts/
-│   ├── simulate_scri_dataset.R      # Generate simulated datasets
-│   ├── sequential_surveillance.R    # Perform sequential analysis
-│   ├── dashboard_app.R              # Interactive Shiny dashboard
-│   └── launch_dashboard.R           # Dashboard launcher
+│   ├── simulate_scri_dataset.R           # Generate simulated datasets (supports custom & SequentialDesign methods)
+│   ├── simulate_scri_sequential_design.R # SequentialDesign implementation (called by simulate_scri_dataset.R)
+│   ├── sequential_surveillance.R         # Perform sequential analysis using Sequential package
+│   ├── validate_surveillance.R           # Type I error and power validation (1000+ simulations)
+│   ├── dashboard_app.R                   # Interactive Shiny dashboard
+│   └── launch_dashboard.R                # Dashboard launcher
 ├── Testing & Validation/
-│   ├── check_data.R                 # Data validation utility
-│   ├── test_control_window.R        # Window logic testing
-│   └── test_control_window2.R       # Advanced window testing
+│   ├── check_data.R                      # Data validation utility
+│   ├── test_control_window.R             # Window logic testing
+│   └── test_control_window2.R            # Advanced window testing
 ├── Documentation/
-│   ├── CLAUDE.md                    # This file (project instructions)
-│   ├── CONFIG_GUIDE.md              # Configuration manual
-│   └── DASHBOARD_README.md          # Dashboard user guide
+│   ├── CLAUDE.md                         # This file (project instructions)
+│   ├── CONFIG_GUIDE.md                   # Configuration manual
+│   └── DASHBOARD_README.md               # Dashboard user guide
 ├── Data Files/
-│   ├── scri_data_wide.csv           # One row per case
-│   ├── scri_data_long.csv           # Two rows per case (risk/control)
-│   └── scri_simulation.RData        # R workspace with all objects
-└── surveillance_outputs/            # Generated results, plots, reports
+│   ├── scri_data_wide.csv                # One row per case
+│   ├── scri_data_long.csv                # Two rows per case (risk/control)
+│   └── scri_simulation.RData             # R workspace with all objects
+└── surveillance_outputs/                 # Generated results, plots, reports
+    ├── sequential_design_output/         # SequentialDesign simulation results
+    └── validation_results/               # Type I error and power validation studies
 ```
 
 ## Scripts in Repository
@@ -144,8 +177,13 @@ SeqVaccineSafety/
 ### Main Analysis Scripts
 
 #### simulate_scri_dataset.R
-Generates simulated SCRI datasets for vaccine safety surveillance:
+Generates simulated SCRI datasets for vaccine safety surveillance with **dual simulation modes**:
 - **Configuration-driven**: Reads all parameters from `config.yaml`
+- **Simulation Method Selection** (via `simulation.method` in config):
+  - `"custom"` (default): Transparent educational simulation with seasonality
+  - `"sequential_design"`: Calls SequentialDesign package for validation studies
+
+**Custom Method Features**:
 - Creates population of vaccinated individuals (configurable size, default 20,000)
 - Assigns age groups (65-74, 75-84, 85+) based on configured distributions
 - Simulates vaccination dates following exponential distribution (front-loaded to season start)
@@ -157,7 +195,15 @@ Generates simulated SCRI datasets for vaccine safety surveillance:
 - Determines event timing in risk vs. control windows based on simulated relative risk
 - Calculates person-time for each window
 - Filters for complete windows only (configurable)
-- **Outputs**:
+
+**SequentialDesign Method Features** (calls `simulate_scri_sequential_design.R`):
+- Uses SequentialDesign package functions for standardized simulation
+- Supports multiple strata with configurable event rates
+- Models misclassification (sensitivity, positive predictive value)
+- Designed for large-scale validation (1000+ simulations)
+- Outputs stored in `surveillance_outputs/sequential_design_output/`
+
+**Outputs** (custom method):
   - `scri_data_wide.csv` - One row per case (wide format)
   - `scri_data_long.csv` - Two rows per case (long format for regression)
   - `scri_simulation.RData` - R workspace with all simulation objects
@@ -209,10 +255,47 @@ Interactive R Shiny dashboard for real-time vaccine safety monitoring using the 
 
 #### launch_dashboard.R
 Convenience script to launch the Shiny dashboard:
-- Automatically checks for and installs required packages (config, shiny, shinydashboard, ggplot2, plotly, DT, fresh, Sequential)
+- Automatically checks for and installs required packages (config, shiny, shinydashboard, ggplot2, plotly, DT, fresh, Sequential, SequentialDesign)
 - Validates presence of `config.yaml` and `scri_data_wide.csv`
 - Launches dashboard in default web browser
 - Provides clear user instructions in console
+
+#### validate_surveillance.R
+**NEW**: Comprehensive validation system for Type I error control and statistical power using SequentialDesign:
+- **Purpose**: Validates surveillance system performance through large-scale simulation studies
+- **Configuration-driven**: Uses `simulation.sequential_design` parameters from `config.yaml`
+- **Three Validation Scenarios** (1000+ simulations each):
+  1. **Type I Error Validation** (RR = 1.0): Tests false positive rate under null hypothesis
+  2. **Power Validation** (RR = 1.5): Tests detection capability with moderate elevated risk
+  3. **Power Validation** (RR = 2.0): Tests detection capability with strong elevated risk
+
+**SequentialDesign Integration**:
+- Uses `initialize.data()` to configure study parameters
+- Calls `create.exposure()` and `sim.exposure()` for data generation
+- Executes `SCRI.seq()` for sequential analysis across all simulations
+- Supports misclassification modeling (sensitivity, PPV)
+- Handles multiple strata (age groups, sex, etc.)
+
+**Outputs** (in `surveillance_outputs/validation_results/`):
+- `validation_report.txt` - Comprehensive summary of all validation scenarios
+- `type1_error_RR1.0/` - Sequential package output files for null hypothesis testing
+- `power_RR1.5/` - Output files for moderate effect size power analysis
+- `power_RR2.0/` - Output files for strong effect size power analysis
+
+**Typical Runtime**: 30-90 minutes for 3000 total simulations (1000 per scenario)
+
+**Usage**:
+```r
+# Configure parameters in config.yaml first
+# Then run:
+source("validate_surveillance.R")
+```
+
+**Interpretation**:
+- Type I error rate should be ≈ target alpha (e.g., 0.05)
+- Power at RR=1.5 should be ≥ 80-90%
+- Power at RR=2.0 should be > 95%
+- Results inform system calibration and performance documentation
 
 ### Testing & Validation Scripts
 
@@ -389,20 +472,33 @@ The codebase has been reviewed by statistical experts and underwent critical imp
 - ✅ **Mathematical Correctness**: All formulas verified for SCRI design
 - ✅ **Edge Cases**: Zero cells, sparse data, unequal windows tested
 - ✅ **Output Verification**: All results consistent with Sequential package
-- ⚠️ **Type I Error Validation**: Recommended (1000 simulations with RR=1.0)
-- ⚠️ **Power Validation**: Recommended (1000 simulations with RR=1.5)
+- ✅ **SequentialDesign Integration**: Validation framework implemented with `validate_surveillance.R`
+- 🔄 **Type I Error Validation**: Now available via `validate_surveillance.R` (run 1000 simulations with RR=1.0)
+- 🔄 **Power Validation**: Now available via `validate_surveillance.R` (run 1000 simulations with RR=1.5, 2.0)
+
+**How to Run Validation**:
+```r
+# 1. Configure parameters in config.yaml
+# 2. Run validation script
+source("validate_surveillance.R")
+
+# 3. Review results in surveillance_outputs/validation_results/
+# 4. Update this section with empirical Type I error and power rates
+```
 
 **Recommended for:**
 - Educational use and teaching SCRI methodology
 - Research simulations and method development
 - Exploration of sequential surveillance designs
 - Preliminary planning for VSD-like surveillance
+- Validation studies using SequentialDesign package
 
 **Before production VSD use:**
-- Conduct Type I error control validation studies
-- Verify power under realistic scenarios
-- Peer review by independent statistician
-- IRB and regulatory approval
+- ✅ Run `validate_surveillance.R` and document results
+- ⚠️ Verify empirical Type I error ≈ target alpha (e.g., 0.05)
+- ⚠️ Verify power ≥ 80% at RR=1.5
+- ⚠️ Peer review by independent statistician
+- ⚠️ IRB and regulatory approval
 
 ## Interactive Dashboard
 
