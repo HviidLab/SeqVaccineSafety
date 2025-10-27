@@ -211,12 +211,10 @@ for (look in 1:actual_looks) {
 
   # Calculate observed relative risk (rate ratio)
   # RR = (events_risk / risk_window_length) / (events_control / control_window_length)
-  if (events_control > 0) {
-    observed_RR <- (events_risk / risk_window_length) / (events_control / control_window_length)
-  } else {
-    # Apply continuity correction for zero cells
-    observed_RR <- (events_risk / risk_window_length) / ((events_control + 0.5) / control_window_length)
-  }
+  # Apply symmetric Agresti-Coull continuity correction to reduce bias
+  events_risk_adj <- events_risk + 0.5
+  events_control_adj <- events_control + 0.5
+  observed_RR <- (events_risk_adj / risk_window_length) / (events_control_adj / control_window_length)
 
   # Perform exact sequential binomial test using Sequential package
   # CRITICAL: Must use same z ratio as setup for correct null hypothesis
@@ -245,19 +243,34 @@ for (look in 1:actual_looks) {
   }
 
   # Extract sequential-adjusted confidence intervals for RR
-  # Use column indexing to handle spaces in column names
-  # Sequential package output: Test, Cases, Controls, Cumul Cases, Cumul Controls, E[Cases|H0],
-  # RR estimate, LLR, target, actual, CV, Reject H0, Lower limit, Upper limit
-  RR_CI_lower <- if(!is.null(seq_result) && nrow(seq_result) > 0 && ncol(seq_result) >= 13) {
-    as.numeric(seq_result[nrow(seq_result), 13])  # "Lower limit" is column 13
-  } else {
-    NA
-  }
+  # IMPROVED: Use column names from Sequential package output for robustness
+  # These CIs account for multiple testing (sequential-adjusted)
+  RR_CI_lower <- NA
+  RR_CI_upper <- NA
 
-  RR_CI_upper <- if(!is.null(seq_result) && nrow(seq_result) > 0 && ncol(seq_result) >= 14) {
-    as.numeric(seq_result[nrow(seq_result), 14])  # "Upper limit" is column 14
-  } else {
-    NA
+  if (!is.null(seq_result) && nrow(seq_result) > 0) {
+    result_row <- seq_result[nrow(seq_result), ]
+
+    # Try to extract using column names (robust to package changes)
+    col_names <- colnames(result_row)
+
+    # Look for CI columns (handle various possible names)
+    lower_col <- which(col_names %in% c("RR_CI_lower", "Lower limit", "lower.limit", "CI_lower"))
+    upper_col <- which(col_names %in% c("RR_CI_upper", "Upper limit", "upper.limit", "CI_upper"))
+
+    if (length(lower_col) > 0) {
+      RR_CI_lower <- as.numeric(result_row[, lower_col[1]])
+    } else if (ncol(result_row) >= 13) {
+      # Fallback to position 13 (as per Sequential package structure)
+      RR_CI_lower <- as.numeric(result_row[, 13])
+    }
+
+    if (length(upper_col) > 0) {
+      RR_CI_upper <- as.numeric(result_row[, upper_col[1]])
+    } else if (ncol(result_row) >= 14) {
+      # Fallback to position 14 (as per Sequential package structure)
+      RR_CI_upper <- as.numeric(result_row[, 14])
+    }
   }
 
   # Calculate test statistic and p-value for display

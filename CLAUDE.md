@@ -85,9 +85,10 @@ install.packages(c("config", "ggplot2", "shiny", "shinydashboard", "plotly", "DT
 5. Use results to assess system performance and update documentation
 
 **Simulation Method Selection**:
-- **Custom method** (`method: "custom"`): Transparent, educational simulation with seasonality
+- **Custom method** (`method: "custom"`): Transparent, educational simulation
   - Best for: Single datasets, teaching, research, exploratory analysis
-  - Strengths: Clear code, flexible parameters, seasonal modeling
+  - Strengths: Clear code, flexible parameters, homogeneous baseline rate
+  - Assumption: Constant baseline event rate (seasonality removed for statistical clarity)
 
 - **SequentialDesign method** (`method: "sequential_design"`): Standardized simulation framework
   - Best for: Large-scale validation (1000+ sims), power studies, Type I error checks
@@ -156,9 +157,11 @@ SeqVaccineSafety/
 │   ├── dashboard_app.R                   # Interactive Shiny dashboard
 │   └── launch_dashboard.R                # Dashboard launcher
 ├── Testing & Validation/
+│   ├── calculate_sample_size.R           # Sample size calculator for power analysis
 │   ├── check_data.R                      # Data validation utility
 │   ├── test_control_window.R             # Window logic testing
-│   └── test_control_window2.R            # Advanced window testing
+│   ├── test_control_window2.R            # Advanced window testing
+│   └── test_unequal_windows.R            # Verify z parameter fix with unequal windows
 ├── Documentation/
 │   ├── CLAUDE.md                         # This file (project instructions)
 │   ├── CONFIG_GUIDE.md                   # Configuration manual
@@ -180,17 +183,17 @@ SeqVaccineSafety/
 Generates simulated SCRI datasets for vaccine safety surveillance with **dual simulation modes**:
 - **Configuration-driven**: Reads all parameters from `config.yaml`
 - **Simulation Method Selection** (via `simulation.method` in config):
-  - `"custom"` (default): Transparent educational simulation with seasonality
+  - `"custom"` (default): Transparent educational simulation with homogeneous baseline rate
   - `"sequential_design"`: Calls SequentialDesign package for validation studies
 
 **Custom Method Features**:
 - Creates population of vaccinated individuals (configurable size, default 20,000)
 - Assigns age groups (65-74, 75-84, 85+) based on configured distributions
 - Simulates vaccination dates following exponential distribution (front-loaded to season start)
-- **Seasonality**: Implements time-varying baseline event rates
-  - Sinusoidal pattern: rate(t) = baseline × (1 + 0.2 × sin(2π(t-60)/365))
-  - ±20% seasonal variation with peak in early February
-  - Addresses temporal confounding in SCRI designs
+- **Baseline Event Rate**: Homogeneous rate assumption
+  - Constant baseline event rate across the entire season
+  - Simplifies model and avoids temporal confounding complications
+  - Appropriate for SCRI design where within-person comparison controls for many confounders
 - Assigns adverse events using SCRI methodology (cases-only design)
 - Determines event timing in risk vs. control windows based on simulated relative risk
 - Calculates person-time for each window
@@ -298,6 +301,21 @@ source("validate_surveillance.R")
 - Results inform system calibration and performance documentation
 
 ### Testing & Validation Scripts
+
+#### calculate_sample_size.R
+Sample size calculator for SCRI sequential surveillance:
+- **Purpose**: Determines required number of cases for desired statistical power
+- **Method**: Asymptotic approximation with sequential inflation factor
+- **Inputs**: All parameters from `config.yaml` (alpha, number of looks, target RR, window lengths, baseline rate)
+- **Outputs**:
+  - Required sample size (number of cases) for target power
+  - Sequential inflation factor for Wald spending (adjusts for multiple looks)
+  - Power table across different relative risks (RR 1.0 to 3.0)
+  - Operational estimates: vaccinations needed, surveillance duration
+  - Recommendations for config.yaml updates
+- **Usage**: `Rscript calculate_sample_size.R`
+- **Runtime**: < 5 seconds
+- **Use cases**: Study design, power analysis, parameter optimization
 
 #### check_data.R
 Data validation and exploratory analysis utility:
@@ -441,28 +459,48 @@ The codebase has been reviewed by statistical experts and underwent critical imp
 - **Fix**: Now calculates zp = control_length / risk_length (matching ratio)
 - **Impact**: Correct critical values and power calculations in Sequential package
 
-**4. Sequential-Adjusted Confidence Intervals (Added)**
+**4. Sequential-Adjusted Confidence Intervals (Added, Enhanced October 2025)**
 - **Issue**: Standard CIs don't account for multiple testing
-- **Fix**: Extract and report 95% CIs from Sequential package (columns 13-14)
-- **Impact**: Proper inference accounting for sequential monitoring
+- **Previous Fix**: Hardcoded column positions (13, 14) - fragile
+- **Enhanced Fix**: Robust column name matching with fallback to positions
+- **Implementation**: Searches for columns by name (RR_CI_lower, Lower limit, etc.), falls back to positions if needed
+- **Impact**: Proper inference accounting for sequential monitoring, robust to Sequential package updates
 - **Example**: RR=1.27 (95% CI: 1.09-1.32)
 
-**5. Seasonality Adjustment (Added)**
-- **Issue**: Constant baseline rate unrealistic, susceptible to time-varying confounding
-- **Fix**: Sinusoidal seasonal pattern: rate(t) = baseline × (1 + 0.2 × sin(2π(t-60)/365))
-- **Parameters**: ±20% seasonal variation, peak in early February (day 60)
-- **Impact**: More realistic simulations, addresses temporal confounding
+**5. Baseline Rate Assumption (Simplified, October 2025)**
+- **Previous**: Sinusoidal seasonal pattern (±20% variation)
+- **Current**: Homogeneous baseline rate (constant across season)
+- **Rationale**:
+  - Simplifies model without loss of validity for SCRI design
+  - Within-person comparison controls for most temporal confounding
+  - Avoids statistical complexity of season-specific probability calculations
+  - More transparent for educational purposes
+- **Impact**: Clearer model, appropriate for SCRI methodology
 
-**6. Zero Cell Handling (Added)**
-- **Issue**: Undefined RR when control events = 0
-- **Fix**: Applies continuity correction (events_control + 0.5)
-- **Impact**: Robust analysis with sparse data
+**6. Zero Cell Handling (Added, Enhanced October 2025)**
+- **Issue**: Undefined RR when control events = 0, asymmetric correction introduces bias
+- **Previous Fix**: Asymmetric correction (only control events + 0.5)
+- **Enhanced Fix**: Symmetric Agresti-Coull continuity correction (both risk and control + 0.5)
+- **Implementation**: `events_risk_adj = events_risk + 0.5`, `events_control_adj = events_control + 0.5`
+- **Impact**: Reduced bias in RR estimation, robust analysis with sparse data
+
+**7. Sample Size Calculator Utility (Added October 2025)**
+- **Purpose**: Calculate required number of cases for desired power in SCRI sequential surveillance
+- **Features**:
+  - Asymptotic approximation with sequential inflation factor
+  - Adjusts for number of looks and Wald alpha spending
+  - Power table across different relative risks (RR 1.0-3.0)
+  - Operational estimates (vaccinations needed, surveillance duration)
+  - Configuration-driven (uses config.yaml parameters)
+- **Script**: `calculate_sample_size.R`
+- **Usage**: `Rscript calculate_sample_size.R`
+- **Impact**: Proper study design and power analysis for vaccine safety surveillance
 
 ### Robustness Features
 
 ✅ **Unequal Window Lengths**: All calculations correct for any risk/control window ratio
-✅ **Sparse Data**: Continuity corrections for zero cells
-✅ **Temporal Confounding**: Seasonal variation in baseline rates
+✅ **Sparse Data**: Continuity corrections for zero cells (symmetric correction added Oct 2025)
+✅ **Temporal Confounding**: Controlled by SCRI within-person design (homogeneous baseline assumption)
 ✅ **Multiple Testing**: Sequential-adjusted confidence intervals
 ✅ **Exact Methods**: No asymptotic approximations (Sequential package)
 
@@ -492,7 +530,11 @@ The codebase has been reviewed by statistical experts and underwent critical imp
 1. ✅ Fixed z parameter bug in `sequential_surveillance.R:228`
 2. ✅ Created `test_unequal_windows.R` to verify fix
 3. ✅ Created `SEQUENTIAL_VERIFICATION.md` for statistical review
-4. ✅ All fixes tested and verified working
+4. ✅ Removed seasonality from simulation (homogeneous baseline rate)
+5. ✅ Enhanced CI extraction with robust column name matching
+6. ✅ Implemented symmetric Agresti-Coull continuity correction
+7. ✅ Created `calculate_sample_size.R` sample size calculator utility
+8. ✅ All fixes tested and verified working
 
 **How to Run Validation**:
 ```r

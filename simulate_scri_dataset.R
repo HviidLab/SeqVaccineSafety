@@ -183,7 +183,7 @@ patient_data <- patient_data[
 cat(sprintf("Patients with complete risk and control windows: %d\n", nrow(patient_data)))
 
 # ============================================================================
-# SIMULATE ADVERSE EVENTS WITH SEASONALITY (CASES ONLY - SCRI DESIGN)
+# SIMULATE ADVERSE EVENTS (CASES ONLY - SCRI DESIGN)
 # ============================================================================
 
 cat("Simulating adverse events using SCRI design...\n")
@@ -191,59 +191,41 @@ cat("Simulating adverse events using SCRI design...\n")
 # In SCRI, we only include CASES (individuals who experienced the event)
 # For each case, we determine if the event occurred in risk or control window
 
-# Add seasonal variation to baseline event rate
-# Model: rate(t) = baseline * (1 + amplitude * sin(2π * (t - peak) / 365))
-# This creates seasonal peaks and troughs in event rates
-# Peak typically in winter months (day ~60 = early February)
-
-# Seasonal parameters (optional, can be disabled by setting amplitude = 0)
-seasonal_amplitude <- 0.2  # 20% seasonal variation (±20% around baseline)
-seasonal_peak_day <- 60    # Peak in early February (day 60 of flu season)
-
-# Function to calculate time-varying event rate
-get_seasonal_rate <- function(date, baseline_rate, amplitude, peak_day, season_start) {
-  days_since_start <- as.numeric(date - season_start)
-  # Sinusoidal seasonal pattern with period = 365 days
-  seasonal_multiplier <- 1 + amplitude * sin(2 * pi * (days_since_start - peak_day) / 365)
-  return(baseline_rate * seasonal_multiplier)
-}
-
-# Calculate expected cases accounting for:
-# 1. Elevated risk in risk window (relative_risk)
-# 2. Seasonal variation in baseline rate (time-varying)
-
-# For simplicity, use average seasonal rate over the season
-# (More sophisticated: integrate over actual person-time distribution)
-mid_season_date <- season_start + season_length / 2
-avg_seasonal_rate <- get_seasonal_rate(mid_season_date, baseline_event_rate,
-                                       seasonal_amplitude, seasonal_peak_day, season_start)
+# NOTE: Seasonality has been removed for statistical clarity
+# Assumption: Homogeneous baseline event rate across the season
+# This simplifies the model and avoids temporal confounding complications
 
 # Total person-time across both windows
 total_persontime <- sum(patient_data$risk_persontime) + sum(patient_data$control_persontime)
 
-# Expected rate accounting for elevated risk in risk window
-# This is a weighted average
-expected_cases <- avg_seasonal_rate * total_persontime *
-  (1 + (relative_risk - 1) * sum(patient_data$risk_persontime) / total_persontime)
+# Calculate expected cases accounting for elevated risk in risk window
+# Exact calculation:
+# Expected cases = expected_risk_events + expected_control_events
+expected_risk_events <- baseline_event_rate * relative_risk * sum(patient_data$risk_persontime)
+expected_control_events <- baseline_event_rate * sum(patient_data$control_persontime)
+expected_cases <- expected_risk_events + expected_control_events
 
 # Generate actual number of cases (Poisson-distributed)
 n_cases <- rpois(1, expected_cases)
 
 cat(sprintf("Baseline event rate: %.5f per person-day\n", baseline_event_rate))
-cat(sprintf("Seasonal variation: ±%.0f%% (peak day %d)\n",
-            seasonal_amplitude * 100, seasonal_peak_day))
-cat(sprintf("Average seasonal rate: %.5f per person-day\n", avg_seasonal_rate))
-
+cat(sprintf("Relative risk in risk window: %.2f\n", relative_risk))
+cat(sprintf("Expected cases: %.1f (risk: %.1f, control: %.1f)\n",
+            expected_cases, expected_risk_events, expected_control_events))
 cat(sprintf("Generating %d cases from population of %d...\n", n_cases, nrow(patient_data)))
 
 # Randomly select which individuals are cases
 case_indices <- sample(1:nrow(patient_data), size = n_cases, replace = FALSE)
 
 # For SCRI: Among cases, determine if event was in risk or control window
-# Probability event occurred in risk window (given it occurred somewhere)
+# With homogeneous baseline rate:
 # P(risk|event) = (RR * risk_days) / (RR * risk_days + control_days)
+# This assumes constant baseline event rate across both windows
 prob_risk_given_event <- (relative_risk * risk_window_length) /
   (relative_risk * risk_window_length + control_window_length)
+
+cat(sprintf("Probability of event in risk window (given case): %.3f\n",
+            prob_risk_given_event))
 
 # Create case dataset
 cases_data <- patient_data[case_indices, ]
