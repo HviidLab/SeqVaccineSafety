@@ -219,11 +219,13 @@ for (look in 1:actual_looks) {
   }
 
   # Perform exact sequential binomial test using Sequential package
-  # Suppress console output from Sequential package
+  # CRITICAL: Must use same z ratio as setup for correct null hypothesis
+  # For equal windows: z=1 (p=0.5)
+  # For unequal windows: z=control_length/risk_length (p=risk_length/total_length)
   seq_result <- suppressMessages(Analyze.Binomial(
     name = analysis_name,
     test = look,
-    z = 1,                    # Matching ratio (z=1 for SCRI, implies p=0.5)
+    z = zp_ratio,             # Use matching ratio from setup (CORRECTED BUG)
     cases = events_risk,
     controls = events_control
   ))
