@@ -1,15 +1,11 @@
-# Influenza Vaccine Safety Sequential Surveillance Dashboard
-# Interactive Shiny application for public health monitoring
+# Vaccine Safety Sequential Surveillance Dashboard
+# Interactive Shiny application
 
-# Set CRAN mirror
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
-# Install and load required packages
 required_packages <- c("config", "shiny", "shinydashboard", "ggplot2", "plotly", "DT", "fresh", "Sequential")
-
 for (pkg in required_packages) {
   if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
-    cat(sprintf("Installing %s...\n", pkg))
     install.packages(pkg)
     library(pkg, character.only = TRUE)
   }

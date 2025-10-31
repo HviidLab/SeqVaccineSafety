@@ -1,78 +1,208 @@
 # SeqVaccineSafety
 
-An R-based vaccine safety surveillance system using Self-Controlled Risk Interval (SCRI) designs with sequential monitoring methods.
+Sequential vaccine safety surveillance using Self-Controlled Risk Interval (SCRI) designs with real-time monitoring.
 
 [![R](https://img.shields.io/badge/R-%3E%3D%204.0-blue.svg)](https://www.r-project.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen.svg)](STATUS.md)
+[![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen.svg)](#status)
 
 ---
 
 ## Overview
 
-SeqVaccineSafety provides a complete end-to-end workflow for vaccine safety surveillance in adults aged 65+ years. The system uses the Self-Controlled Risk Interval (SCRI) design—where each person serves as their own control—combined with sequential monitoring using the MaxSPRT (Maximized Sequential Probability Ratio Test) for early signal detection.
+SeqVaccineSafety provides an end-to-end workflow for vaccine safety surveillance in adults aged 65+. The system uses:
+
+- **SCRI Design**: Self-Controlled Risk Interval (each person is their own control)
+- **Sequential Monitoring**: MaxSPRT for early signal detection
+- **Exact Methods**: Sequential R package (CDC-validated)
+- **Interactive Dashboard**: Real-time parameter adjustment and visualization
 
 **Key Features:**
-- Configuration-driven architecture (no hard-coded values)
+- Configuration-driven (all parameters in `config.yaml`)
 - Complete workflow: simulate → analyze → visualize
-- Interactive Shiny dashboard with real-time updates
+- Interactive Shiny dashboard
 - Publication-ready outputs
-- Built-in data validation and testing utilities
-- Uses CDC-validated Sequential R package
+- Built-in validation utilities
 
 ---
 
 ## Quick Start
 
-### 1. Install Dependencies
-
-Open R and run:
-```r
-install.packages(c("config", "ggplot2", "shiny", "shinydashboard",
-                   "plotly", "DT", "fresh", "Sequential", "SequentialDesign"))
-```
-
-Or simply run any script—dependencies are auto-installed if missing.
-
-### 2. Launch the Interactive Dashboard
+### Install and Launch Dashboard
 
 ```r
 source("launch_dashboard.R")
 ```
 
-This opens an interactive dashboard in your web browser where you can:
-- Adjust analysis parameters in real-time
-- See instant visual feedback on signal detection
-- Explore different scenarios interactively
+This auto-installs dependencies and opens an interactive dashboard where you can explore the analysis in real-time.
 
-### 3. Run Complete Analysis Workflow
+### Run Complete Workflow
 
 ```r
-# Step 1: Generate simulated SCRI dataset
+# 1. Generate simulated data
 source("simulate_scri_dataset.R")
 
-# Step 2: Perform sequential surveillance analysis
+# 2. Perform sequential surveillance
 source("sequential_surveillance.R")
 
-# Step 3: Launch dashboard to visualize results
+# 3. Launch dashboard
 source("launch_dashboard.R")
 ```
 
 ---
 
-## What is SCRI Design?
+## Installation
 
-**Self-Controlled Risk Interval (SCRI)** is a case-only design where:
-- Each vaccinated individual who experiences an adverse event serves as their own control
-- Event rates in a **risk window** (e.g., days 1-28 post-vaccination) are compared to a **control window** (e.g., days 29-56)
-- Controls for time-invariant confounders (genetics, chronic conditions, behavior)
-- No need for unvaccinated comparison group
+### Prerequisites
+- R ≥ 4.0
+- RStudio (recommended)
 
-**Sequential Monitoring** allows:
-- Continuous surveillance with multiple "looks" at accumulating data
-- Early detection of safety signals
-- Statistical control of Type I error across multiple testing
-- Optimal stopping when signals detected
+### Manual Package Installation
+
+```r
+install.packages(c("config", "ggplot2", "shiny", "shinydashboard",
+                   "plotly", "DT", "fresh", "Sequential", "SequentialDesign"))
+```
+
+**Note**: All scripts auto-install missing packages.
+
+---
+
+## Usage
+
+### Basic Workflow
+
+1. **Configure** - Edit `config.yaml` to set your parameters:
+   ```yaml
+   simulation:
+     population_size: 20000
+     true_relative_risk: 1.5
+
+   scri_design:
+     risk_window: {start_day: 1, end_day: 28}
+     control_window: {start_day: 29, end_day: 56}
+
+   sequential_analysis:
+     overall_alpha: 0.05
+     number_of_looks: 8
+   ```
+
+2. **Simulate** - Generate SCRI dataset:
+   ```r
+   source("simulate_scri_dataset.R")
+   ```
+   Creates: `scri_data_wide.csv`, `scri_data_long.csv`, `scri_simulation.RData`
+
+3. **Analyze** - Run sequential surveillance:
+   ```r
+   source("sequential_surveillance.R")
+   ```
+   Generates outputs in `surveillance_outputs/`
+
+4. **Visualize** - Launch interactive dashboard:
+   ```r
+   source("launch_dashboard.R")
+   ```
+
+### Interactive Dashboard
+
+The dashboard provides:
+- **Real-time parameter adjustment** (alpha, windows, looks)
+- **Visual signal detection** (color-coded alerts)
+- **Interactive plots** (zoom, pan, hover)
+- **Automated recommendations**
+- **Exportable results**
+
+**Controls:**
+- Alpha: 0.01 to 0.10
+- Number of looks: 4 to 12
+- Risk/control windows: Customizable
+- Minimum cases: 10 to 50
+
+### Configuration Profiles
+
+Three pre-configured scenarios:
+
+```r
+# Standard (default)
+cfg <- config::get()
+
+# Conservative (stricter)
+cfg <- config::get(config = "conservative")
+
+# Acute events (7-day risk window)
+cfg <- config::get(config = "acute_events")
+```
+
+---
+
+## Configuration Guide
+
+All parameters managed through `config.yaml`:
+
+### Key Configuration Sections
+
+**Simulation Settings**
+```yaml
+simulation:
+  population_size: 20000              # Vaccinated individuals
+  random_seed: 12345                  # For reproducibility
+  baseline_event_rate: 0.0002         # Events per person-day
+  true_relative_risk: 1.5             # Simulated RR
+```
+
+**SCRI Design**
+```yaml
+scri_design:
+  risk_window:                        # Post-vaccination monitoring
+    start_day: 1
+    end_day: 28
+  control_window:                     # Baseline comparison
+    start_day: 29
+    end_day: 56                       # Match risk window length
+```
+
+**Sequential Analysis**
+```yaml
+sequential_analysis:
+  overall_alpha: 0.05                 # Type I error rate
+  number_of_looks: 8                  # Interim analyses
+  look_interval_days: 14              # Days between looks
+  minimum_cases_per_look: 20          # Min sample size
+  stop_on_signal: true                # Stop when detected
+```
+
+**Dashboard Settings**
+```yaml
+dashboard:
+  defaults:
+    alpha: 0.05
+    number_of_looks: 8
+  alert_thresholds:
+    relative_risk:
+      warning: 1.5
+      critical: 2.0
+```
+
+### Common Configurations
+
+**Conservative Analysis**
+```yaml
+sequential_analysis:
+  overall_alpha: 0.01      # More stringent
+  number_of_looks: 4       # Fewer looks
+  minimum_cases_per_look: 30
+```
+
+**Acute Event Detection**
+```yaml
+scri_design:
+  risk_window: {start_day: 1, end_day: 7}
+  control_window: {start_day: 8, end_day: 14}
+
+sequential_analysis:
+  look_interval_days: 7
+```
 
 ---
 
@@ -80,253 +210,242 @@ source("launch_dashboard.R")
 
 ```
 SeqVaccineSafety/
-├── config.yaml                    # Single source of truth for all parameters
-├── Main Analysis Scripts
-│   ├── simulate_scri_dataset.R    # Generate simulated datasets
-│   ├── sequential_surveillance.R  # Perform sequential analysis
-│   ├── dashboard_app.R            # Interactive Shiny dashboard
-│   └── launch_dashboard.R         # Dashboard launcher
-├── Testing & Validation
-│   ├── calculate_sample_size.R    # Sample size calculator
-│   ├── validate_surveillance.R    # Type I error and power validation
-│   └── test_*.R                   # Various test scripts
-├── Documentation
-│   ├── README.md                  # This file
-│   ├── CLAUDE.md                  # Comprehensive project documentation
-│   ├── CONFIG_GUIDE.md            # Configuration manual
-│   └── DASHBOARD_README.md        # Dashboard user guide
-├── Data Files
-│   ├── scri_data_wide.csv         # Generated: One row per case
-│   └── scri_data_long.csv         # Generated: Two rows per case
-└── surveillance_outputs/          # Generated results and plots
+├── config.yaml                      # Configuration (single source of truth)
+├── Main Scripts/
+│   ├── simulate_scri_dataset.R      # Data generation
+│   ├── sequential_surveillance.R    # Sequential analysis
+│   ├── dashboard_app.R              # Shiny dashboard
+│   └── launch_dashboard.R           # Dashboard launcher
+├── Validation/
+│   ├── validate_surveillance.R      # Type I error/power validation
+│   ├── calculate_sample_size.R     # Sample size calculator
+│   └── test_unequal_windows.R      # Window testing
+├── Generated Data/
+│   ├── scri_data_wide.csv           # One row per case
+│   ├── scri_data_long.csv           # Two rows per case
+│   └── scri_simulation.RData        # R workspace
+└── surveillance_outputs/            # Analysis results
 ```
 
 ---
 
-## Configuration
+## Methodology
 
-All analysis parameters are managed through **`config.yaml`**—the single source of truth.
+### SCRI Design
 
-**Key configuration sections:**
-- **Simulation settings**: Population size, event rates, relative risk
-- **SCRI design**: Risk/control window definitions
-- **Sequential analysis**: Alpha level, number of looks, minimum cases
-- **Dashboard settings**: Default values, slider ranges, thresholds
+**Self-Controlled Risk Interval**:
+- Each person serves as their own control
+- Case-only design (only individuals with events)
+- Compares event rates: risk window vs. control window
+- Controls for time-invariant confounders
 
-**Example:**
-```yaml
-scri:
-  risk_window_start: 1
-  risk_window_end: 28
-  control_window_start: 29
-  control_window_end: 56
-
-sequential:
-  alpha: 0.05
-  n_looks: 8
-  look_interval_days: 7
-  min_cases_per_look: 10
+**Relative Risk Calculation**:
 ```
+RR = (events_risk / risk_days) / (events_control / control_days)
+```
+- Properly accounts for unequal window lengths
+- Continuity correction for zero cells
+- Sequential-adjusted confidence intervals
 
-**Configuration profiles included:**
-- `default` - Standard analysis (alpha=0.05, 8 looks, 28-day risk window)
-- `conservative` - Stringent analysis (alpha=0.01, 4 looks)
-- `acute_events` - Early-onset events (7-day risk window, RR=2.0)
+### Sequential Analysis
 
-**Documentation:** See [CONFIG_GUIDE.md](CONFIG_GUIDE.md) for comprehensive instructions.
+**Method**: MaxSPRT (Maximized Sequential Probability Ratio Test)
+- **Package**: Sequential R package (Kulldorff & Silva)
+- **Test**: Binomial test with Wald alpha spending
+- **Null hypothesis**: Events distributed proportional to person-time
+- **Signal detection**: Test statistic exceeds critical boundary
+
+**Key Features**:
+- Exact methods (not approximations)
+- Controls Type I error across multiple looks
+- Early stopping for safety signals
+- Sequential-adjusted confidence intervals
+
+### Statistical Rigor
+
+✅ **Validated Components**:
+- Correct rate ratio calculation
+- Proper null hypothesis for unequal windows
+- Sequential package parameters verified
+- Zero cell handling with continuity correction
+- Unequal window support
+
+✅ **Recent Fixes** (Oct 2025):
+- Critical z parameter bug fixed
+- Sequential-adjusted CIs implemented
+- Symmetric continuity correction added
+- Comprehensive verification completed
 
 ---
 
-## Usage Examples
+## Validation
 
-### Example 1: Run with Default Settings
+### Type I Error and Power Validation
 
-```r
-# Uses default configuration profile from config.yaml
-source("simulate_scri_dataset.R")
-source("sequential_surveillance.R")
-source("launch_dashboard.R")
-```
+To validate the surveillance system:
 
-### Example 2: Acute Event Monitoring (Short Risk Window)
-
-Edit `config.yaml`:
 ```yaml
-scri:
-  risk_window_start: 1
-  risk_window_end: 7    # Short 7-day risk window for acute events
-
+# config.yaml
 simulation:
-  true_relative_risk: 2.0  # Expect stronger effect
+  method: "sequential_design"
+  sequential_design:
+    n_simulations: 1000
 ```
 
-Then run analysis:
 ```r
-source("simulate_scri_dataset.R")
-source("sequential_surveillance.R")
+source("validate_surveillance.R")  # Runtime: 30-90 min
 ```
 
-### Example 3: Conservative Monitoring (Fewer Looks, Lower Alpha)
+Runs three scenarios:
+- **RR=1.0**: Type I error rate (should ≈ alpha)
+- **RR=1.5**: Power for moderate effect
+- **RR=2.0**: Power for strong effect
 
-Edit `config.yaml`:
-```yaml
-sequential:
-  alpha: 0.01          # More stringent threshold
-  n_looks: 4           # Fewer sequential looks
-  min_cases_per_look: 25  # More data per look
-```
+Results saved to `surveillance_outputs/validation_results/`
 
-### Example 4: Calculate Required Sample Size
+### Sample Size Calculation
 
 ```r
 source("calculate_sample_size.R")
-# Output shows required number of cases for target power
-# Provides recommendations for config.yaml updates
 ```
+
+Calculates required cases for target power:
+- Accounts for sequential inflation
+- Adjusts for number of looks
+- Provides operational estimates
 
 ---
 
 ## Outputs
 
-The analysis generates 5 key outputs in `surveillance_outputs/`:
+### Generated Files
 
-1. **sequential_monitoring_results.csv** - Tabular results for all looks
-2. **current_status_report.txt** - Human-readable status summary
-3. **sequential_monitoring_plot.png** - Test statistics vs. boundaries
-4. **cases_timeline.png** - Cumulative cases over time
-5. **dashboard_alerts.csv** - Alert levels for key metrics
+**Data Files**:
+- `scri_data_wide.csv` - One row per case
+- `scri_data_long.csv` - Two rows per case (risk/control)
+- `scri_simulation.RData` - R workspace
 
-All outputs include **sequential-adjusted confidence intervals** that account for multiple testing.
+**Analysis Results** (`surveillance_outputs/`):
+- `sequential_monitoring_results.csv` - All sequential looks
+- `current_status_report.txt` - Summary report
+- `sequential_monitoring_plot.png` - Test statistics and boundaries
+- `cases_timeline.png` - Cumulative cases over time
+- `dashboard_alerts.csv` - Alert metrics
 
----
+### Interpreting Results
 
-## Statistical Methods
+**No Signal**:
+- RR near 1.0 (no elevated risk)
+- P-value > alpha (not significant)
+- Action: Continue surveillance
 
-### Sequential Analysis
-- Uses **Sequential R package** (Kulldorff & Silva, CDC Vaccine Safety Datalink)
-- MaxSPRT (Maximized Sequential Probability Ratio Test) with exact calculations
-- Wald alpha spending for optimal Type I error control
-- Automatic critical value calculation
-- Sequential-adjusted 95% confidence intervals
-
-### SCRI Design
-- Self-controlled design: each person is their own control
-- Case-only analysis: no denominator data needed
-- **Rate ratio estimation**: RR = (events_risk/risk_length) / (events_control/control_length)
-- Robust to unequal window lengths
-- Symmetric Agresti-Coull continuity correction for zero cells
-
----
-
-## Validation Status
-
-### Completed ✅
-- Mathematical correctness verified
-- Code reviewed by CDC statistician-level expert
-- Critical statistical bugs fixed and tested
-- Uses CDC-validated Sequential package
-- Test scripts confirm proper behavior
-
-### Production-Ready For:
-- Educational use and teaching SCRI methodology
-- Research publications and academic work
-- Methods development and exploration
-- Preliminary observational analyses
-
-### For VSD Production Deployment:
-Large-scale empirical validation (1000+ simulations) is recommended but not required for research use.
-
-**See [STATUS.md](STATUS.md) for detailed validation status.**
+**Signal Detected**:
+- RR > 1.5 (elevated risk)
+- P-value < alpha (significant)
+- Action: Immediate investigation
+- Review: Case details, stratified analysis, clinical significance
 
 ---
 
-## Interactive Dashboard
+## Status
 
-The Shiny dashboard provides:
-- Real-time parameter adjustment with instant updates
-- Interactive Plotly visualizations (zoom, pan, hover)
-- Animated alert banners for signal detection
-- Color-coded metrics (red=signal, green=no signal)
-- Automated recommendations for public health action
-- Professional styling with custom CSS
+**Current Status**: Production-ready for research and education
 
-**Launch:**
-```r
-source("launch_dashboard.R")
-```
+✅ **Completed**:
+- Core functionality working
+- Critical bugs fixed and verified
+- Comprehensive code review
+- Statistical methods validated
+- Documentation complete
 
-**Documentation:** See [DASHBOARD_README.md](DASHBOARD_README.md) for detailed user guide.
+🔄 **Optional**:
+- Empirical validation (1000+ simulations)
+- Independent statistical review
+- Regulatory approval (for clinical deployment)
 
----
-
-## System Requirements
-
-- **R**: Version 4.0 or higher
-- **RStudio**: Recommended (optional)
-- **Operating System**: Windows, macOS, or Linux
-- **RAM**: 4GB minimum, 8GB recommended for large simulations
-- **Disk Space**: 500MB for project and outputs
+**Recommended For**:
+- ✅ Educational use and teaching
+- ✅ Research publications
+- ✅ Methods development
+- ✅ Preliminary analyses
+- ⚠️ Clinical deployment (after full validation)
 
 ---
 
-## Documentation
+## Tips and Best Practices
 
-- **README.md** (this file) - Quick start and overview
-- **[CLAUDE.md](CLAUDE.md)** - Comprehensive project documentation and developer guide
-- **[CONFIG_GUIDE.md](CONFIG_GUIDE.md)** - Configuration manual with examples
-- **[DASHBOARD_README.md](DASHBOARD_README.md)** - Interactive dashboard user guide
-- **[STATUS.md](STATUS.md)** - Current project status and validation
-- **[SEQUENTIAL_VERIFICATION.md](SEQUENTIAL_VERIFICATION.md)** - Statistical verification checklist
+### Configuration
+1. Always match risk and control window lengths
+2. Set `random_seed` for reproducible simulations
+3. Use configuration profiles for common scenarios
+4. Test parameter changes in dashboard first
 
----
+### Analysis
+1. Ensure minimum cases threshold is reasonable (20-50)
+2. More looks = more frequent monitoring but lower power per look
+3. Review sequential-adjusted CIs (account for multiple testing)
+4. Consider alpha=0.01 for more conservative monitoring
 
-## Citation
-
-If you use SeqVaccineSafety in your research, please cite:
-
-```
-SeqVaccineSafety: Self-Controlled Risk Interval Design with Sequential Monitoring
-https://github.com/[your-username]/SeqVaccineSafety
-```
-
-*(Update with actual repository URL and publication details when available)*
+### Dashboard
+1. Use interactive plots to explore results
+2. Test different window definitions
+3. Compare alpha levels (0.05 vs 0.01)
+4. Export visualizations for presentations
 
 ---
 
-## Support
+## Troubleshooting
 
-- **Documentation**: Start with this README, then see CLAUDE.md for details
-- **Configuration Help**: See CONFIG_GUIDE.md
-- **Dashboard Help**: See DASHBOARD_README.md
-- **Issues**: Contact project maintainer (see config.yaml for contact info)
+**"File not found" errors**
+- Run `simulate_scri_dataset.R` first to generate data
+
+**Dashboard won't load**
+- Check R version ≥ 4.0
+- Run `launch_dashboard.R` which auto-installs packages
+
+**No signal detected with high RR**
+- Increase population size or baseline rate
+- Check window definitions
+- Verify minimum cases threshold
+
+**Results seem incorrect**
+- Verify windows don't overlap
+- Ensure risk/control windows match in length
+- Check `config.yaml` for typos
 
 ---
 
-## Recent Updates
+## Contributing
 
-**October 2025:**
-- Fixed critical z parameter bug for unequal windows
-- Implemented sequential-adjusted confidence intervals
-- Added symmetric Agresti-Coull continuity correction
-- Created sample size calculator utility
-- Completed CDC statistician-level code review
-
-See [SESSION_NOTES_2025-10-28.md](SESSION_NOTES_2025-10-28.md) for detailed session notes.
+Contributions welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Make changes with tests
+4. Submit pull request with clear description
 
 ---
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see LICENSE file for details
 
 ---
 
-## Acknowledgments
+## References
 
-- **Sequential R package**: Kulldorff M, Silva IR (CDC Vaccine Safety Datalink)
-- **SequentialDesign R package**: Maro JC, Hou Y (Harvard Pilgrim Health Care Institute)
-- **Statistical review**: CDC statistician-level expert review (October 2025)
+**Packages**:
+- Sequential: Kulldorff & Silva (CDC Vaccine Safety Datalink)
+- SequentialDesign: Maro & Hou (FDA Sentinel Initiative)
+
+**Methods**:
+- SCRI Design: Self-controlled risk interval methodology
+- MaxSPRT: Maximized Sequential Probability Ratio Test
+- Wald Alpha Spending: Optimal alpha spending function
 
 ---
 
-**Ready to get started?** Run `source("launch_dashboard.R")` and explore!
+## Contact
+
+For questions or issues, please open a GitHub issue.
+
+**Repository**: [SeqVaccineSafety](https://github.com/HviidLab/SeqVaccineSafety)
