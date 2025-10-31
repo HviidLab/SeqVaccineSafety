@@ -243,33 +243,60 @@ for (look in 1:actual_looks) {
   }
 
   # Extract sequential-adjusted confidence intervals for RR
-  # IMPROVED: Use column names from Sequential package output for robustness
+  # ROBUST EXTRACTION: Use column names from Sequential package output
   # These CIs account for multiple testing (sequential-adjusted)
   RR_CI_lower <- NA
   RR_CI_upper <- NA
 
   if (!is.null(seq_result) && nrow(seq_result) > 0) {
     result_row <- seq_result[nrow(seq_result), ]
-
-    # Try to extract using column names (robust to package changes)
     col_names <- colnames(result_row)
 
-    # Look for CI columns (handle various possible names)
-    lower_col <- which(col_names %in% c("RR_CI_lower", "Lower limit", "lower.limit", "CI_lower"))
-    upper_col <- which(col_names %in% c("RR_CI_upper", "Upper limit", "upper.limit", "CI_upper"))
+    # Strategy 1: Try to extract using column names (most robust)
+    # Handle various possible column naming conventions
+    lower_col_names <- c("RR_CI_lower", "Lower limit", "lower.limit", "CI_lower",
+                         "LowerLimit", "Lower_limit", "lower_CI", "RR.lower")
+    upper_col_names <- c("RR_CI_upper", "Upper limit", "upper.limit", "CI_upper",
+                         "UpperLimit", "Upper_limit", "upper_CI", "RR.upper")
 
+    lower_col <- which(col_names %in% lower_col_names)
+    upper_col <- which(col_names %in% upper_col_names)
+
+    # Strategy 2: Try grep pattern matching for flexibility
+    if (length(lower_col) == 0) {
+      lower_col <- grep("lower|Lower", col_names, ignore.case = TRUE)
+    }
+    if (length(upper_col) == 0) {
+      upper_col <- grep("upper|Upper", col_names, ignore.case = TRUE)
+    }
+
+    # Extract CI values
     if (length(lower_col) > 0) {
       RR_CI_lower <- as.numeric(result_row[, lower_col[1]])
     } else if (ncol(result_row) >= 13) {
-      # Fallback to position 13 (as per Sequential package structure)
+      # Strategy 3: Fallback to position 13 (Sequential package standard structure)
       RR_CI_lower <- as.numeric(result_row[, 13])
+      if (look == 1) {
+        warning("CI extraction using fallback position 13. Consider verifying Sequential package output structure.")
+      }
     }
 
     if (length(upper_col) > 0) {
       RR_CI_upper <- as.numeric(result_row[, upper_col[1]])
     } else if (ncol(result_row) >= 14) {
-      # Fallback to position 14 (as per Sequential package structure)
+      # Strategy 3: Fallback to position 14 (Sequential package standard structure)
       RR_CI_upper <- as.numeric(result_row[, 14])
+      if (look == 1) {
+        warning("CI extraction using fallback position 14. Consider verifying Sequential package output structure.")
+      }
+    }
+
+    # Validate extracted CIs
+    if (is.na(RR_CI_lower) || is.na(RR_CI_upper)) {
+      if (look == 1) {
+        warning(sprintf("Unable to extract confidence intervals. Available columns: %s",
+                       paste(col_names, collapse=", ")))
+      }
     }
   }
 

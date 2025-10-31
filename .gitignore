@@ -1,13 +1,72 @@
+# R and RStudio files
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
+.httr-oauth
+
+# R temporary files
+*.Rout
+*.Rdata
+*.rds
+*_cache/
+/cache
 
 # Claude Code local settings
 .claude/
 
 # Generated simulation outputs (exclude large binary files)
 scri_simulation.RData
+*.RData
 
 # Generated surveillance outputs
 surveillance_outputs/
+
+# Validation and test output files
+Rplots.pdf
+datareal*.txt
+datatest*.txt
+datatest*.pdf
+test_single_*.R
+*_validation_test.R
+diagnostic_*.R
+quick_*.R
+
+# SequentialDesign package outputs
+*_SequentialDesign.txt
+Summary_*.txt
+Histogram_*.txt
+*_Stratum*.txt
+SimulatedData*.txt
+
+# Generated CSV files (keep only templates/examples)
+scri_data_wide.csv
+scri_data_long.csv
+
+# Plot outputs
+*.png
+*.pdf
+*.jpg
+*.jpeg
+
+# Log files
+*.log
+*.out
+
+# Temporary files
+*.tmp
+*.temp
+*~
+.DS_Store
+Thumbs.db
+
+# Validation results (can be large)
+validation_results/
+type1_error_*/
+power_*/
+
+# Backup files
+*.bak
+*.backup
+*_backup.*
+*_old.*
