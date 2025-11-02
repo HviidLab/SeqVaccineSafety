@@ -27,18 +27,6 @@ if (!is.null(cfg$simulation$random_seed)) {
   cat(sprintf("Random seed: %d\n", cfg$simulation$random_seed))
 }
 
-# Check simulation method
-simulation_method <- cfg$simulation$method
-if (is.null(simulation_method)) simulation_method <- "custom"
-
-cat(sprintf("Simulation method: %s\n\n", simulation_method))
-
-# Branch to SequentialDesign if requested
-if (simulation_method == "sequential_design") {
-  source("simulate_scri_sequential_design.R")
-  quit(save = "no")
-}
-
 # ============================================================================
 # EXTRACT PARAMETERS
 # ============================================================================

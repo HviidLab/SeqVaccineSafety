@@ -216,10 +216,6 @@ SeqVaccineSafety/
 │   ├── sequential_surveillance.R    # Sequential analysis
 │   ├── dashboard_app.R              # Shiny dashboard
 │   └── launch_dashboard.R           # Dashboard launcher
-├── Validation/
-│   ├── validate_surveillance.R      # Type I error/power validation
-│   ├── calculate_sample_size.R     # Sample size calculator
-│   └── test_unequal_windows.R      # Window testing
 ├── Generated Data/
 │   ├── scri_data_wide.csv           # One row per case
 │   └── scri_simulation.RData        # R workspace
@@ -274,44 +270,6 @@ RR = (events_risk / risk_days) / (events_control / control_days)
 - Sequential-adjusted CIs implemented
 - Symmetric continuity correction added
 - Comprehensive verification completed
-
----
-
-## Validation
-
-### Type I Error and Power Validation
-
-To validate the surveillance system:
-
-```yaml
-# config.yaml
-simulation:
-  method: "sequential_design"
-  sequential_design:
-    n_simulations: 1000
-```
-
-```r
-source("validate_surveillance.R")  # Runtime: 30-90 min
-```
-
-Runs three scenarios:
-- **RR=1.0**: Type I error rate (should ≈ alpha)
-- **RR=1.5**: Power for moderate effect
-- **RR=2.0**: Power for strong effect
-
-Results saved to `surveillance_outputs/validation_results/`
-
-### Sample Size Calculation
-
-```r
-source("calculate_sample_size.R")
-```
-
-Calculates required cases for target power:
-- Accounts for sequential inflation
-- Adjusts for number of looks
-- Provides operational estimates
 
 ---
 

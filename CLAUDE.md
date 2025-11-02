@@ -19,7 +19,6 @@ SeqVaccineSafety is an R project for vaccine safety surveillance using Self-Cont
 - `simulate_scri_dataset.R` - Generate SCRI data
 - `sequential_surveillance.R` - Perform sequential analysis
 - `dashboard_app.R` + `launch_dashboard.R` - Interactive dashboard
-- `validate_surveillance.R` - Type I error/power validation
 - `README.md` - Complete documentation
 
 ### Standard Workflow
