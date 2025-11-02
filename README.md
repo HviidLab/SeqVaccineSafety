@@ -91,7 +91,7 @@ install.packages(c("config", "ggplot2", "shiny", "shinydashboard",
    ```r
    source("simulate_scri_dataset.R")
    ```
-   Creates: `scri_data_wide.csv`, `scri_data_long.csv`, `scri_simulation.RData`
+   Creates: `scri_data_wide.csv`, `scri_simulation.RData`
 
 3. **Analyze** - Run sequential surveillance:
    ```r
@@ -222,7 +222,6 @@ SeqVaccineSafety/
 │   └── test_unequal_windows.R      # Window testing
 ├── Generated Data/
 │   ├── scri_data_wide.csv           # One row per case
-│   ├── scri_data_long.csv           # Two rows per case
 │   └── scri_simulation.RData        # R workspace
 └── surveillance_outputs/            # Analysis results
 ```
@@ -322,7 +321,6 @@ Calculates required cases for target power:
 
 **Data Files**:
 - `scri_data_wide.csv` - One row per case
-- `scri_data_long.csv` - Two rows per case (risk/control)
 - `scri_simulation.RData` - R workspace
 
 **Analysis Results** (`surveillance_outputs/`):

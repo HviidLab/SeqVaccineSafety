@@ -41,7 +41,6 @@ SimulatedData*.txt
 
 # Generated CSV files (keep only templates/examples)
 scri_data_wide.csv
-scri_data_long.csv
 
 # Plot outputs
 *.png

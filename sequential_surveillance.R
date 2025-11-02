@@ -4,13 +4,11 @@
 
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
-required_packages <- c("config", "ggplot2", "Sequential")
-for (pkg in required_packages) {
-  if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
-    install.packages(pkg)
-    library(pkg, character.only = TRUE)
-  }
-}
+# 1. Install pacman itself, if not already installed
+if (!require("pacman")) install.packages("pacman")
+
+# 2. Use p_load to check, install (if needed), and load all packages
+pacman::p_load(config, ggplot2, Sequential)
 
 # ============================================================================
 # LOAD CONFIGURATION AND DATA
@@ -28,17 +26,12 @@ cat("=======================================================\n\n")
 cat("Loading SCRI data...\n")
 
 cases_wide <- read.csv("scri_data_wide.csv", stringsAsFactors = FALSE)
-cases_long <- read.csv("scri_data_long.csv", stringsAsFactors = FALSE)
 
 # Convert date columns
 date_cols_wide <- c("observation_start", "vaccination_date", "observation_end",
                     "risk_window_start", "risk_window_end",
                     "control_window_start", "control_window_end", "event_date")
 for (col in date_cols_wide) cases_wide[[col]] <- as.Date(cases_wide[[col]])
-
-date_cols_long <- c("vaccination_date", "event_date", "window_start",
-                    "window_end", "calendar_date")
-for (col in date_cols_long) cases_long[[col]] <- as.Date(cases_long[[col]])
 
 cat(sprintf("Cases: %d, Range: %s to %s\n\n",
             nrow(cases_wide),
@@ -102,27 +95,25 @@ z_critical_display <- qnorm(1 - alpha_per_look)
 
 cat("Defining look schedule...\n")
 
-look_dates <- sort(unique(cases_wide$control_window_end))
 min_cases_per_look <- cfg$sequential_analysis$minimum_cases_per_look
 look_interval <- cfg$sequential_analysis$look_interval_days
-look_schedule <- c()
-current_date <- min(look_dates)
-max_date <- max(look_dates)
 
-while (current_date <= max_date) {
-  available_cases <- cases_wide[cases_wide$control_window_end <= current_date, ]
-  if (nrow(available_cases) >= min_cases_per_look) {
-    look_schedule <- c(look_schedule, as.character(current_date))
-  }
-  current_date <- current_date + look_interval
-}
+# Calendar-based schedule (realistic for real-time surveillance)
+# Start date: earliest time when cases with complete windows could be available
+season_start <- as.Date(cfg$simulation$season$start_date)
+first_look_date <- season_start + control_window_length + look_interval
 
-look_schedule <- unique(look_schedule)
-actual_looks <- min(length(look_schedule), n_looks)
-look_schedule <- as.Date(look_schedule[1:actual_looks])
+# Generate fixed calendar-based look schedule
+look_schedule <- seq(
+  from = first_look_date,
+  by = look_interval,
+  length.out = n_looks
+)
 
-cat(sprintf("Looks: %d, Schedule: %s to %s\n\n",
-            actual_looks, min(look_schedule), max(look_schedule)))
+cat(sprintf("Looks: %d planned, Schedule: %s to %s\n",
+            n_looks, min(look_schedule), max(look_schedule)))
+cat(sprintf("Look interval: %d days, Minimum cases per look: %d\n\n",
+            look_interval, min_cases_per_look))
 
 # ============================================================================
 # PERFORM SEQUENTIAL ANALYSIS
@@ -146,12 +137,26 @@ surveillance_results <- data.frame(
   signal_detected = logical(),
   stringsAsFactors = FALSE
 )
-for (look in 1:actual_looks) {
+
+# Track sequential test number (increments only when analysis is performed)
+sequential_test_number <- 0
+
+for (look in 1:n_looks) {
   look_date <- look_schedule[look]
 
-  # Get cases available at this look
+  # Get cases available at this look (realistic: only cases with complete windows by this date)
   available_cases <- cases_wide[cases_wide$control_window_end <= look_date, ]
   n_cases <- nrow(available_cases)
+
+  # Check if sufficient cases are available
+  if (n_cases < min_cases_per_look) {
+    cat(sprintf("Look %d (%s): n=%d - INSUFFICIENT CASES (minimum: %d), skipping analysis\n",
+                look, look_date, n_cases, min_cases_per_look))
+    next
+  }
+
+  # Increment sequential test number
+  sequential_test_number <- sequential_test_number + 1
 
   events_risk <- sum(available_cases$event_in_risk_window)
   events_control <- n_cases - events_risk
@@ -165,7 +170,7 @@ for (look in 1:actual_looks) {
   # Perform exact sequential binomial test
   seq_result <- suppressMessages(Analyze.Binomial(
     name = analysis_name,
-    test = look,
+    test = sequential_test_number,
     z = zp_ratio,
     cases = events_risk,
     controls = events_control

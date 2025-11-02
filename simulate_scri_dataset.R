@@ -189,68 +189,6 @@ for (i in 1:nrow(cases_data)) {
 cases_data$days_to_event <- as.numeric(cases_data$event_date - cases_data$vaccination_date)
 
 # ============================================================================
-# FORMAT FOR SCRI ANALYSIS
-# ============================================================================
-
-cat("Formatting data for SCRI analysis...\n")
-
-# Create long format: two rows per case (risk and control windows)
-scri_data <- data.frame()
-
-for (i in 1:nrow(cases_data)) {
-  risk_row <- data.frame(
-    patient_id = cases_data$patient_id[i],
-    age = cases_data$age[i],
-    age_group = cases_data$age_group[i],
-    vaccination_date = cases_data$vaccination_date[i],
-    event_date = cases_data$event_date[i],
-    days_to_event = cases_data$days_to_event[i],
-    window = "risk",
-    window_start = cases_data$risk_window_start[i],
-    window_end = cases_data$risk_window_end[i],
-    person_time = risk_window_length,
-    event = cases_data$event_in_risk_window[i]
-  )
-
-  control_row <- data.frame(
-    patient_id = cases_data$patient_id[i],
-    age = cases_data$age[i],
-    age_group = cases_data$age_group[i],
-    vaccination_date = cases_data$vaccination_date[i],
-    event_date = cases_data$event_date[i],
-    days_to_event = cases_data$days_to_event[i],
-    window = "control",
-    window_start = cases_data$control_window_start[i],
-    window_end = cases_data$control_window_end[i],
-    person_time = control_window_length,
-    event = 1 - cases_data$event_in_risk_window[i]
-  )
-
-  scri_data <- rbind(scri_data, risk_row, control_row)
-}
-
-scri_data$risk_indicator <- as.integer(scri_data$window == "risk")
-
-# ============================================================================
-# PREPARE FOR SEQUENTIAL MONITORING
-# ============================================================================
-
-cat("Preparing sequential monitoring...\n")
-
-scri_data$calendar_date <- scri_data$window_end
-scri_data <- scri_data[order(scri_data$calendar_date), ]
-
-look_dates <- seq(
-  from = season_start + control_window_end + look_interval,
-  by = look_interval,
-  length.out = n_looks
-)
-
-scri_data$look_available <- sapply(scri_data$calendar_date, function(d) {
-  sum(d >= look_dates)
-})
-
-# ============================================================================
 # SUMMARY STATISTICS
 # ============================================================================
 
@@ -280,11 +218,6 @@ cat("\nAge distribution:\n")
 print(table(cases_data$age_group))
 
 cat(sprintf("\nSequential monitoring: %d looks every %d days\n", n_looks, look_interval))
-cat("Cases available by look:\n")
-for (look in 1:n_looks) {
-  n_available <- sum(scri_data$look_available >= look & scri_data$window == "risk")
-  cat(sprintf("  Look %d: %d cases\n", look, n_available))
-}
 
 # ============================================================================
 # SAVE DATASETS
@@ -293,18 +226,16 @@ for (look in 1:n_looks) {
 cat("\nSaving datasets...\n")
 
 write.csv(cases_data, "scri_data_wide.csv", row.names = FALSE)
-write.csv(scri_data, "scri_data_long.csv", row.names = FALSE)
 
-save(patient_data, cases_data, scri_data,
+save(patient_data, cases_data,
      risk_window_start, risk_window_end,
      control_window_start, control_window_end,
      baseline_event_rate, relative_risk,
-     alpha, n_looks, look_dates,
+     alpha, n_looks,
      n_cases, n_events_risk, n_events_control,
      file = "scri_simulation.RData")
 
 cat("  - scri_data_wide.csv\n")
-cat("  - scri_data_long.csv\n")
 cat("  - scri_simulation.RData\n")
 
 cat("\n=====================================================\n")
