@@ -245,7 +245,7 @@ generate_alert_table <- function(latest_look, alpha_per_look, output_path) {
 
 cfg <- config::get(file = "config.yaml")
 
-output_dir <- file.path(getwd(), cfg$output$directory)
+output_dir <- cfg$output$directory
 if (!dir.exists(output_dir)) dir.create(output_dir)
 
 cat("=======================================================\n")
@@ -293,10 +293,15 @@ RR_target <- cfg$simulation$true_relative_risk
 analysis_dir <- file.path(output_dir, "sequential_setup")
 if (dir.exists(analysis_dir)) unlink(analysis_dir, recursive = TRUE)
 dir.create(analysis_dir, showWarnings = FALSE)
+# Sequential package requires absolute path
+analysis_dir <- normalizePath(analysis_dir, winslash = "/")
 
 # Initialize Sequential analysis
 max_N <- nrow(cases_wide)
 zp_ratio <- control_window_length / risk_window_length
+
+# Save working directory (Sequential package changes it)
+original_wd <- getwd()
 
 AnalyzeSetUp.Binomial(
   name = analysis_name,
@@ -311,6 +316,9 @@ AnalyzeSetUp.Binomial(
   title = "SCRI Vaccine Safety Surveillance",
   address = analysis_dir
 )
+
+# Restore working directory
+setwd(original_wd)
 
 cat("Sequential analysis setup complete\n\n")
 
@@ -404,6 +412,9 @@ for (look in 1:n_looks) {
     cases = events_risk,
     controls = events_control
   ))
+
+  # Restore working directory (Sequential package changes it)
+  setwd(original_wd)
 
   # Extract results
   signal_detected <- if(!is.null(seq_result) && nrow(seq_result) > 0) {
