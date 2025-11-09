@@ -2,6 +2,79 @@
 # Self-Controlled Risk Interval (SCRI) Design
 # Method: Sequential binomial test using Sequential package
 
+# ==============================================================================
+# OVERVIEW
+# ==============================================================================
+#
+# This script performs sequential vaccine safety surveillance using exact
+# binomial methods from the Sequential package (Kulldorff & Silva, CDC).
+#
+# WORKFLOW (5 Main Steps):
+#   1. Load SCRI data and configuration
+#   2. Setup sequential analysis parameters (MaxSPRT with Wald alpha spending)
+#   3. Define calendar-based look schedule (realistic surveillance timing)
+#   4. Perform sequential analysis at each look (with early stopping if signal)
+#   5. Generate outputs: plots, reports, and alert files
+#
+# STATISTICAL METHODS:
+#   - MaxSPRT: Maximized Sequential Probability Ratio Test
+#   - Exact binomial test (not approximations)
+#   - Wald alpha spending function for Type I error control
+#   - Sequential-adjusted confidence intervals
+#   - Null hypothesis: Events distributed proportional to person-time
+#
+# CALENDAR-BASED SCHEDULING:
+#   - Realistic approach: Each look occurs at fixed calendar intervals
+#   - Only cases with complete follow-up windows by look date are analyzed
+#   - Allows for insufficient data (skips looks if minimum cases not met)
+#   - Example: If look_interval_days=14, looks occur every 2 weeks
+#
+# INPUTS:
+#   - config.yaml: Sequential analysis parameters including:
+#       * overall_alpha: Type I error rate (e.g., 0.05)
+#       * number_of_looks: Total planned interim analyses (e.g., 8)
+#       * look_interval_days: Days between looks (e.g., 14)
+#       * minimum_cases_per_look: Min sample size for analysis (e.g., 20)
+#       * stop_on_signal: Whether to halt monitoring upon signal detection
+#   - scri_data_wide.csv: Case-level dataset from simulate_scri_dataset.R
+#
+# OUTPUTS (surveillance_outputs/ directory):
+#   - sequential_monitoring_results.csv: Detailed results for all looks
+#       Columns: look_number, analysis_date, cases_analyzed, events_risk,
+#                events_control, RR, LLR, critical_value, signal_detected, etc.
+#   - sequential_monitoring_plot.png: Test statistics and boundaries over time
+#   - cases_timeline.png: Cumulative cases and events over time
+#   - current_status_report.txt: Plain text summary of latest surveillance status
+#   - dashboard_alerts.csv: Alert metrics and thresholds
+#
+# HELPER FUNCTIONS (Lines 14-240):
+#   This script defines 5 helper functions at the top:
+#     1. extract_ci_from_sequential(): Extract CIs from Sequential package output
+#     2. plot_sequential_monitoring(): Create test statistic monitoring plot
+#     3. plot_cases_timeline(): Visualize cumulative cases over time
+#     4. generate_status_report(): Create plain text summary report
+#     5. generate_dashboard_alerts(): Create alert thresholds for visualization
+#   These are called in Step 5 (Generate Outputs) of the main workflow.
+#
+# CONFIGURATION:
+#   - All parameters are sourced from config.yaml
+#   - DO NOT hard-code values in this script
+#   - To modify analysis: Edit config.yaml, not this file
+#   - Example modifications:
+#       * More conservative: sequential_analysis$overall_alpha: 0.01
+#       * Fewer looks: sequential_analysis$number_of_looks: 4
+#       * Weekly monitoring: sequential_analysis$look_interval_days: 7
+#
+# SIGNAL DETECTION:
+#   A safety signal is detected when the test statistic exceeds the critical
+#   boundary at any look. This indicates potential elevated risk requiring
+#   immediate investigation. Sequential adjustment ensures proper Type I error
+#   control across multiple looks.
+#
+# EXECUTION TIME: ~10-30 seconds depending on number of looks
+#
+# ==============================================================================
+
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
 # 1. Install pacman itself, if not already installed

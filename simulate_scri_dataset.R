@@ -2,6 +2,64 @@
 # Self-Controlled Risk Interval (SCRI) design
 # Target: Adults aged 65+ years
 
+# ==============================================================================
+# OVERVIEW
+# ==============================================================================
+#
+# This script generates synthetic vaccine safety surveillance data using the
+# Self-Controlled Risk Interval (SCRI) design for adults aged 65+ years.
+#
+# WORKFLOW (6 Steps):
+#   1. Load configuration from config.yaml (all parameters)
+#   2. Generate patient population with realistic age distribution
+#   3. Simulate vaccination dates with exponential decay pattern
+#   4. Calculate risk and control time windows post-vaccination
+#   5. Simulate adverse events using SCRI probability model
+#   6. Save datasets for sequential analysis
+#
+# SCRI DESIGN PRINCIPLES:
+#   - Case-only design: Only individuals with adverse events are analyzed
+#   - Within-person comparison: Each person serves as their own control
+#   - Risk window: Early post-vaccination period (e.g., days 1-28)
+#   - Control window: Baseline comparison period (e.g., days 29-56)
+#   - Event window allocation probability:
+#       P(event in risk window | event occurred) =
+#         (RR × risk_days) / (RR × risk_days + control_days)
+#     where RR is the true relative risk
+#
+# INPUTS:
+#   - config.yaml: All simulation parameters including:
+#       * population_size: Number of vaccinated individuals
+#       * baseline_event_rate: Background adverse event rate per person-day
+#       * true_relative_risk: Simulated RR in risk window vs control window
+#       * risk_window: Post-vaccination monitoring period
+#       * control_window: Baseline comparison period
+#       * season dates: Vaccination campaign start/end dates
+#
+# OUTPUTS:
+#   - scri_data_wide.csv: Case-level dataset (one row per case)
+#       Columns: patient_id, vaccination_date, event_date, age_group,
+#                event_in_risk_window, days_since_vaccination
+#   - scri_simulation.RData: Complete R workspace for reproducibility
+#
+# CONFIGURATION:
+#   - All parameters are sourced from config.yaml
+#   - DO NOT hard-code values in this script
+#   - To modify simulation: Edit config.yaml, not this file
+#   - Example modifications:
+#       * Increase population: simulation$population_size: 50000
+#       * Change windows: scri_design$risk_window: {start_day: 1, end_day: 7}
+#       * Adjust relative risk: simulation$true_relative_risk: 2.0
+#
+# NEXT STEPS:
+#   After running this script, execute:
+#     source("sequential_surveillance.R")
+#   to perform sequential safety analysis on the generated data
+#
+# EXECUTION TIME: ~5-10 seconds for 20,000 patients
+#
+# ==============================================================================
+
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 
 # Load required packages
