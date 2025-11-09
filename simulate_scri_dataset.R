@@ -68,11 +68,6 @@ if (!require("config", quietly = TRUE)) {
   library(config)
 }
 
-if (!require("SequentialDesign", quietly = TRUE)) {
-  install.packages("SequentialDesign")
-}
-library(SequentialDesign)
-
 # ============================================================================
 # LOAD CONFIGURATION
 # ============================================================================
