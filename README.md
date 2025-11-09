@@ -15,26 +15,16 @@ SeqVaccineSafety provides an end-to-end workflow for vaccine safety surveillance
 - **SCRI Design**: Self-Controlled Risk Interval (each person is their own control)
 - **Sequential Monitoring**: MaxSPRT for early signal detection
 - **Exact Methods**: Sequential R package (CDC-validated)
-- **Interactive Dashboard**: Real-time parameter adjustment and visualization
 
 **Key Features:**
 - Configuration-driven (all parameters in `config.yaml`)
 - Complete workflow: simulate → analyze → visualize
-- Interactive Shiny dashboard
 - Publication-ready outputs
 - Built-in validation utilities
 
 ---
 
 ## Quick Start
-
-### Install and Launch Dashboard
-
-```r
-source("launch_dashboard.R")
-```
-
-This auto-installs dependencies and opens an interactive dashboard where you can explore the analysis in real-time.
 
 ### Run Complete Workflow
 
@@ -44,10 +34,9 @@ source("simulate_scri_dataset.R")
 
 # 2. Perform sequential surveillance
 source("sequential_surveillance.R")
-
-# 3. Launch dashboard
-source("launch_dashboard.R")
 ```
+
+This generates data, performs the analysis, and creates visualizations in the `surveillance_outputs/` directory.
 
 ---
 
@@ -60,8 +49,7 @@ source("launch_dashboard.R")
 ### Manual Package Installation
 
 ```r
-install.packages(c("config", "ggplot2", "shiny", "shinydashboard",
-                   "plotly", "DT", "fresh", "Sequential", "SequentialDesign"))
+install.packages(c("config", "ggplot2", "Sequential", "SequentialDesign"))
 ```
 
 **Note**: All scripts auto-install missing packages.
@@ -97,27 +85,7 @@ install.packages(c("config", "ggplot2", "shiny", "shinydashboard",
    ```r
    source("sequential_surveillance.R")
    ```
-   Generates outputs in `surveillance_outputs/`
-
-4. **Visualize** - Launch interactive dashboard:
-   ```r
-   source("launch_dashboard.R")
-   ```
-
-### Interactive Dashboard
-
-The dashboard provides:
-- **Real-time parameter adjustment** (alpha, windows, looks)
-- **Visual signal detection** (color-coded alerts)
-- **Interactive plots** (zoom, pan, hover)
-- **Automated recommendations**
-- **Exportable results**
-
-**Controls:**
-- Alpha: 0.01 to 0.10
-- Number of looks: 4 to 12
-- Risk/control windows: Customizable
-- Minimum cases: 10 to 50
+   Generates outputs in `surveillance_outputs/` including plots and reports
 
 ### Configuration Profiles
 
@@ -172,18 +140,6 @@ sequential_analysis:
   stop_on_signal: true                # Stop when detected
 ```
 
-**Dashboard Settings**
-```yaml
-dashboard:
-  defaults:
-    alpha: 0.05
-    number_of_looks: 8
-  alert_thresholds:
-    relative_risk:
-      warning: 1.5
-      critical: 2.0
-```
-
 ### Common Configurations
 
 **Conservative Analysis**
@@ -213,13 +169,11 @@ SeqVaccineSafety/
 ├── config.yaml                      # Configuration (single source of truth)
 ├── Main Scripts/
 │   ├── simulate_scri_dataset.R      # Data generation
-│   ├── sequential_surveillance.R    # Sequential analysis
-│   ├── dashboard_app.R              # Shiny dashboard
-│   └── launch_dashboard.R           # Dashboard launcher
+│   └── sequential_surveillance.R    # Sequential analysis
 ├── Generated Data/
 │   ├── scri_data_wide.csv           # One row per case
 │   └── scri_simulation.RData        # R workspace
-└── surveillance_outputs/            # Analysis results
+└── surveillance_outputs/            # Analysis results and visualizations
 ```
 
 ---
@@ -334,19 +288,13 @@ RR = (events_risk / risk_days) / (events_control / control_days)
 1. Always match risk and control window lengths
 2. Set `random_seed` for reproducible simulations
 3. Use configuration profiles for common scenarios
-4. Test parameter changes in dashboard first
 
 ### Analysis
 1. Ensure minimum cases threshold is reasonable (20-50)
 2. More looks = more frequent monitoring but lower power per look
 3. Review sequential-adjusted CIs (account for multiple testing)
 4. Consider alpha=0.01 for more conservative monitoring
-
-### Dashboard
-1. Use interactive plots to explore results
-2. Test different window definitions
-3. Compare alpha levels (0.05 vs 0.01)
-4. Export visualizations for presentations
+5. Review generated plots and reports in `surveillance_outputs/`
 
 ---
 
@@ -354,10 +302,6 @@ RR = (events_risk / risk_days) / (events_control / control_days)
 
 **"File not found" errors**
 - Run `simulate_scri_dataset.R` first to generate data
-
-**Dashboard won't load**
-- Check R version ≥ 4.0
-- Run `launch_dashboard.R` which auto-installs packages
 
 **No signal detected with high RR**
 - Increase population size or baseline rate

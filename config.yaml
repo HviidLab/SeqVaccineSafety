@@ -127,56 +127,6 @@ default:
       # If true, stop monitoring immediately when signal is detected
 
   # ----------------------------------------------------------------------------
-  # DASHBOARD SETTINGS
-  # ----------------------------------------------------------------------------
-  dashboard:
-    # Default values when dashboard opens
-    defaults:
-      alpha: 0.05
-      number_of_looks: 8
-      risk_window_start: 1
-      risk_window_end: 28
-      control_window_start: 29
-      control_window_end: 56
-      minimum_cases: 20
-
-    # Slider ranges for user input
-    ranges:
-      alpha:
-        min: 0.01
-        max: 0.10
-        step: 0.01
-
-      number_of_looks:
-        min: 4
-        max: 12
-        step: 1
-
-      risk_window_days:
-        min: 1
-        max: 42
-        step: 1
-
-      control_window_days:
-        min: 1
-        max: 84
-        step: 1
-
-      minimum_cases:
-        min: 10
-        max: 50
-        step: 5
-
-    # Visual alert thresholds
-    alert_thresholds:
-      relative_risk:
-        warning: 1.5
-        critical: 2.0
-
-      proportion_in_risk:
-        warning: 0.60
-
-  # ----------------------------------------------------------------------------
   # OUTPUT SETTINGS
   # ----------------------------------------------------------------------------
   output:
