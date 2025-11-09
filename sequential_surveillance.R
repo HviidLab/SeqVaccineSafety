@@ -88,39 +88,29 @@ pacman::p_load(config, ggplot2, Sequential)
 # ============================================================================
 
 # Extract confidence intervals from Sequential package result
+# Sequential package returns RR_CI_lower and RR_CI_upper in columns 13-14
 extract_ci_from_sequential <- function(seq_result) {
-  RR_CI_lower <- NA
-  RR_CI_upper <- NA
+  if (is.null(seq_result) || nrow(seq_result) == 0) {
+    return(list(lower = NA, upper = NA))
+  }
 
-  if (!is.null(seq_result) && nrow(seq_result) > 0) {
-    result_row <- seq_result[nrow(seq_result), ]
-    col_names <- colnames(result_row)
+  result_row <- seq_result[nrow(seq_result), ]
 
-    # Try column names first
-    lower_col_names <- c("RR_CI_lower", "Lower limit", "lower.limit", "CI_lower",
-                         "LowerLimit", "Lower_limit", "lower_CI", "RR.lower")
-    upper_col_names <- c("RR_CI_upper", "Upper limit", "upper.limit", "CI_upper",
-                         "UpperLimit", "Upper_limit", "upper_CI", "RR.upper")
+  # Try named columns first (RR_CI_lower, RR_CI_upper)
+  RR_CI_lower <- if ("RR_CI_lower" %in% colnames(result_row)) {
+    as.numeric(result_row$RR_CI_lower)
+  } else if (ncol(result_row) >= 13) {
+    as.numeric(result_row[, 13])  # Fallback to column 13
+  } else {
+    NA
+  }
 
-    lower_col <- which(col_names %in% lower_col_names)
-    upper_col <- which(col_names %in% upper_col_names)
-
-    # Fallback to grep
-    if (length(lower_col) == 0) lower_col <- grep("lower|Lower", col_names, ignore.case = TRUE)
-    if (length(upper_col) == 0) upper_col <- grep("upper|Upper", col_names, ignore.case = TRUE)
-
-    # Extract values
-    if (length(lower_col) > 0) {
-      RR_CI_lower <- as.numeric(result_row[, lower_col[1]])
-    } else if (ncol(result_row) >= 13) {
-      RR_CI_lower <- as.numeric(result_row[, 13])
-    }
-
-    if (length(upper_col) > 0) {
-      RR_CI_upper <- as.numeric(result_row[, upper_col[1]])
-    } else if (ncol(result_row) >= 14) {
-      RR_CI_upper <- as.numeric(result_row[, 14])
-    }
+  RR_CI_upper <- if ("RR_CI_upper" %in% colnames(result_row)) {
+    as.numeric(result_row$RR_CI_upper)
+  } else if (ncol(result_row) >= 14) {
+    as.numeric(result_row[, 14])  # Fallback to column 14
+  } else {
+    NA
   }
 
   return(list(lower = RR_CI_lower, upper = RR_CI_upper))
