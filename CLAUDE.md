@@ -29,7 +29,6 @@ source("sequential_surveillance.R")     # Analyze and visualize
 
 ### Configuration
 - **Never hard-code parameters** - Everything in `config.yaml`
-- Three profiles: `default`, `conservative`, `acute_events`
 - All scripts load with: `cfg <- config::get(file = "config.yaml")`
 
 ### SCRI Design
@@ -81,9 +80,6 @@ sequential_analysis:
   overall_alpha: 0.01      # More conservative
   number_of_looks: 4       # Fewer looks
 ```
-
-### Add New Configuration Profile
-In `config.yaml`, add new profile section (see `conservative` or `acute_events` examples)
 
 ### Modify Window Definitions
 ```yaml

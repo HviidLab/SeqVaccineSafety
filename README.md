@@ -87,21 +87,6 @@ install.packages(c("config", "ggplot2", "Sequential", "SequentialDesign"))
    ```
    Generates outputs in `surveillance_outputs/` including plots and reports
 
-### Configuration Profiles
-
-Three pre-configured scenarios:
-
-```r
-# Standard (default)
-cfg <- config::get()
-
-# Conservative (stricter)
-cfg <- config::get(config = "conservative")
-
-# Acute events (7-day risk window)
-cfg <- config::get(config = "acute_events")
-```
-
 ---
 
 ## Configuration Guide
@@ -140,9 +125,9 @@ sequential_analysis:
   stop_on_signal: true                # Stop when detected
 ```
 
-### Common Configurations
+### Example Modifications
 
-**Conservative Analysis**
+**For More Conservative Analysis**
 ```yaml
 sequential_analysis:
   overall_alpha: 0.01      # More stringent
@@ -150,7 +135,7 @@ sequential_analysis:
   minimum_cases_per_look: 30
 ```
 
-**Acute Event Detection**
+**For Acute Event Detection (shorter windows)**
 ```yaml
 scri_design:
   risk_window: {start_day: 1, end_day: 7}
@@ -287,7 +272,7 @@ RR = (events_risk / risk_days) / (events_control / control_days)
 ### Configuration
 1. Always match risk and control window lengths
 2. Set `random_seed` for reproducible simulations
-3. Use configuration profiles for common scenarios
+3. Edit `config.yaml` directly to modify parameters
 
 ### Analysis
 1. Ensure minimum cases threshold is reasonable (20-50)
